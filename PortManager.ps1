@@ -45,6 +45,7 @@ function Save-Config {
 # Track SSH processes for auto-reconnect
 $script:SshProcesses = @{}
 $script:AutoReconnect = $true
+$script:ShowPending = $false
 
 function Test-PortInUse {
     param([int]$Port)
@@ -491,7 +492,13 @@ function Update-PortList {
         $pidText.Foreground = [System.Windows.Media.Brushes]::Black
         [System.Windows.Controls.Grid]::SetColumn($pidText, 3)
         
-        if (Test-PortInUse -Port $port) {
+        if ($script:ShowPending) {
+            $dot.Fill = [System.Windows.Media.Brushes]::Orange
+            $statusText.Text = "Pending"
+            $statusText.Foreground = [System.Windows.Media.Brushes]::Orange
+            $processText.Text = "-"
+            $pidText.Text = "-"
+        } elseif (Test-PortInUse -Port $port) {
             $procInfo = Get-PortProcess -Port $port
             $dot.Fill = [System.Windows.Media.Brushes]::LimeGreen
             $statusText.Text = "Active"
@@ -519,7 +526,9 @@ function Update-PortList {
     }
     
     # Update tray icon color based on status
-    if ($totalCount -eq 0) {
+    if ($script:ShowPending) {
+        Update-TrayIcon -Status "pending"
+    } elseif ($totalCount -eq 0) {
         Update-TrayIcon -Status "inactive"
     } elseif ($activeCount -eq $totalCount) {
         Update-TrayIcon -Status "active"
@@ -531,6 +540,12 @@ function Update-PortList {
 }
 
 function Update-ConnectionStatus {
+    if ($script:ShowPending) {
+        $connectionStatus.Text = "Connecting..."
+        $connectionStatus.Foreground = [System.Windows.Media.Brushes]::Orange
+        return
+    }
+    
     $activeCount = 0
     $totalCount = $script:Config.Ports.Count
     
@@ -645,6 +660,10 @@ function Update-TrayIcon {
             $outerColor = [System.Drawing.Color]::FromArgb(255, 140, 0)  # Orange
             $script:notifyIcon.Text = "Port Manager - Partial"
         }
+        "pending" { 
+            $outerColor = [System.Drawing.Color]::FromArgb(255, 200, 0)  # Yellow/Orange
+            $script:notifyIcon.Text = "Port Manager - Connecting..."
+        }
         default { 
             $outerColor = [System.Drawing.Color]::FromArgb(200, 50, 50)  # Red
             $script:notifyIcon.Text = "Port Manager - Inactive"
@@ -665,7 +684,7 @@ function Update-TrayIcon {
 }
 
 # Initial icon
-Update-TrayIcon -Status "inactive"
+Update-TrayIcon -Status "pending"
 
 # Context menu for tray icon
 $script:contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -758,9 +777,21 @@ $window.Add_Closing({
     }
 })
 
-# Initial load
+# Initial load - show pending and start ports
+$script:ShowPending = $true
 Update-PortList
 Update-ConnectionStatus
+$statusText.Text = "Starting port forwards..."
+
+# Start port forwards in background, then refresh
+$window.Add_ContentRendered({
+    Start-PortForward -Ports $script:Config.Ports
+    Start-Sleep -Seconds 2
+    $script:ShowPending = $false
+    Update-PortList
+    Update-ConnectionStatus
+    $statusText.Text = "Port forwards started!"
+})
 
 # Show window
 $window.ShowDialog() | Out-Null
