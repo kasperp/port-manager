@@ -772,11 +772,12 @@ $window.Add_StateChanged({
 })
 
 # Handle window closing - hide to tray instead (unless force quit)
-$window.Add_Closing({
+$window.add_Closing([System.ComponentModel.CancelEventHandler]{
     param($sender, $e)
-    if (-not $script:ForceQuit -and $script:notifyIcon.Visible) {
+    if (-not $script:ForceQuit) {
         $e.Cancel = $true
         $window.Hide()
+        $window.ShowInTaskbar = $false
     }
 })
 
