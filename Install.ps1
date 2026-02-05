@@ -23,5 +23,6 @@ $shortcut.Save()
 Write-Host "Port Manager installed to Windows Startup" -ForegroundColor Green
 Write-Host "Shortcut created: $shortcutPath" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "The application will start automatically on next login."
+Write-Host "Starting Port Manager..."
+Start-Process -FilePath "wscript.exe" -ArgumentList "`"$vbsPath`"" -WorkingDirectory $scriptPath
 Write-Host "To uninstall, run: Uninstall.ps1"
