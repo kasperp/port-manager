@@ -743,7 +743,8 @@ function Update-TrayMenu {
         $script:notifyIcon.Visible = $false
         $script:notifyIcon.Dispose()
         Stop-PortForwards
-        $window.Close()
+        $timer.Stop()
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.InvokeShutdown()
     })
     [void]$script:contextMenu.Items.Add($exitItem)
 }
@@ -797,8 +798,11 @@ $window.Add_ContentRendered({
     $statusText.Text = "Port forwards started!"
 })
 
-# Show window
-$window.ShowDialog() | Out-Null
+# Use Show() instead of ShowDialog() so window can be hidden/shown
+$window.Show()
+
+# Run the WPF application dispatcher (keeps app running when window is hidden)
+[System.Windows.Threading.Dispatcher]::Run()
 
 # Cleanup
 $timer.Stop()
