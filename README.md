@@ -5,65 +5,31 @@ A Windows GUI application for managing SSH port forwards with auto-reconnect cap
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1+-blue)
 ![Windows](https://img.shields.io/badge/Platform-Windows-lightgrey)
 
-## Features
+## Quick Start
 
-- **Visual Port Management** - Modern WPF interface to view and control SSH port forwards
-- **Auto-Reconnect** - Automatically restores dropped SSH connections
-- **System Tray** - Runs minimized in the system tray
-- **Configurable** - Edit host, user, and port list from the GUI
-- **Status Monitoring** - Real-time status of each forwarded port
-
-## Requirements
-
-- Windows 10/11
-- PowerShell 5.1 or later
-- OpenSSH client (included in Windows 10 1809+)
-- SSH key authentication configured for the remote host
-
-## Installation
-
-1. Clone the repository:
-
-   ```
-   git clone https://github.com/kasperp/port-manager.git
-   ```
-
-2. Ensure SSH key authentication is set up for your remote host:
-
-   ```
-   ssh-copy-id user@hostname
-   ```
-
-3. **(Optional)** Install to start automatically on Windows login:
-
+1. Run `Install.ps1` to add to Windows startup and launch:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Install.ps1
    ```
 
-   To remove from startup:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File Uninstall.ps1
-   ```
+2. Configure your SSH host, username, and ports in the app
+3. Ports will auto-forward on startup
 
 ## Usage
 
 ### Launch the Application
 
 **Option 1: VBScript (Recommended)** - Launches completely hidden:
-
 ```
 PortManager.vbs
 ```
 
 **Option 2: Batch file**:
-
 ```
 PortManager.bat
 ```
 
 **Option 3: Direct PowerShell**:
-
 ```powershell
 powershell -ExecutionPolicy Bypass -File PortManager.ps1
 ```
@@ -82,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File PortManager.ps1
 - Double-click the tray icon to restore
 - Right-click for context menu options
 
-## Configuration
+### Configuration
 
 Settings are stored in `ports.json`:
 
@@ -94,7 +60,37 @@ Settings are stored in `ports.json`:
 }
 ```
 
-## How It Works
+### Uninstall
+
+To remove from Windows startup:
+```powershell
+powershell -ExecutionPolicy Bypass -File Uninstall.ps1
+```
+
+---
+
+## Development
+
+### Requirements
+
+- Windows 10/11
+- PowerShell 5.1 or later
+- OpenSSH client (included in Windows 10 1809+)
+- SSH key authentication configured for the remote host
+
+### Setup
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/kasperp/port-manager.git
+   ```
+
+2. Ensure SSH key authentication is set up for your remote host:
+   ```
+   ssh-copy-id user@hostname
+   ```
+
+### How It Works
 
 The application creates SSH tunnels using the `-L` flag for local port forwarding:
 
@@ -103,6 +99,14 @@ ssh -N -L 127.0.0.1:PORT:127.0.0.1:PORT user@host
 ```
 
 Each port gets its own SSH process with keepalive settings to detect and recover from connection drops.
+
+### Features
+
+- **Visual Port Management** - Modern WPF interface to view and control SSH port forwards
+- **Auto-Reconnect** - Automatically restores dropped SSH connections
+- **System Tray** - Runs minimized in the system tray
+- **Configurable** - Edit host, user, and port list from the GUI
+- **Status Monitoring** - Real-time status of each forwarded port
 
 ## License
 
