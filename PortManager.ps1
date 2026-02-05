@@ -46,6 +46,7 @@ function Save-Config {
 $script:SshProcesses = @{}
 $script:AutoReconnect = $true
 $script:ShowPending = $false
+$script:ForceQuit = $false
 
 function Test-PortInUse {
     param([int]$Port)
@@ -736,10 +737,12 @@ function Update-TrayMenu {
     [void]$script:contextMenu.Items.Add("-")
     
     $exitItem = New-Object System.Windows.Forms.ToolStripMenuItem
-    $exitItem.Text = "Exit"
+    $exitItem.Text = "Quit"
     $exitItem.Add_Click({
+        $script:ForceQuit = $true
         $script:notifyIcon.Visible = $false
         $script:notifyIcon.Dispose()
+        Stop-PortForwards
         $window.Close()
     })
     [void]$script:contextMenu.Items.Add($exitItem)
@@ -768,10 +771,10 @@ $window.Add_StateChanged({
     }
 })
 
-# Handle window closing - hide to tray instead
+# Handle window closing - hide to tray instead (unless force quit)
 $window.Add_Closing({
     param($sender, $e)
-    if ($script:notifyIcon.Visible) {
+    if (-not $script:ForceQuit -and $script:notifyIcon.Visible) {
         $e.Cancel = $true
         $window.Hide()
     }
