@@ -8,6 +8,7 @@ A Windows GUI application for managing SSH port forwards with auto-reconnect cap
 ## Quick Start
 
 1. Run `Install.ps1` to add to Windows startup and launch:
+
    ```powershell
    powershell -ExecutionPolicy Bypass -File Install.ps1
    ```
@@ -20,16 +21,19 @@ A Windows GUI application for managing SSH port forwards with auto-reconnect cap
 ### Launch the Application
 
 **Option 1: VBScript (Recommended)** - Launches completely hidden:
+
 ```
 PortManager.vbs
 ```
 
 **Option 2: Batch file**:
+
 ```
 PortManager.bat
 ```
 
 **Option 3: Direct PowerShell**:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File PortManager.ps1
 ```
@@ -63,6 +67,7 @@ Settings are automatically saved to `ports.json` when you modify them in the app
 ### Uninstall
 
 To remove from Windows startup:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File Uninstall.ps1
 ```
@@ -81,6 +86,7 @@ powershell -ExecutionPolicy Bypass -File Uninstall.ps1
 ### Setup
 
 1. Clone the repository:
+
    ```
    git clone https://github.com/kasperp/port-manager.git
    ```
