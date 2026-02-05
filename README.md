@@ -50,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File PortManager.ps1
 
 ### Configuration
 
-Settings are stored in `ports.json`:
+Settings are automatically saved to `ports.json` when you modify them in the app. This file is not required - if missing, the app uses default values and creates the file when you save changes.
 
 ```json
 {
