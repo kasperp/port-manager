@@ -18,6 +18,7 @@ $consoleWindow = [Native.Win32]::GetConsoleWindow()
 $script:Config = @{
     Host = "46.4.77.8"
     User = "kasper"
+    SshPort = 22
     Ports = @(5001, 5000, 4096)
     ConfigFile = "$PSScriptRoot\ports.json"
 }
@@ -30,6 +31,7 @@ function Load-Config {
             $script:Config.Ports = @($saved.Ports)
             $script:Config.Host = $saved.Host
             $script:Config.User = $saved.User
+            if ($saved.SshPort) { $script:Config.SshPort = $saved.SshPort }
         } catch { }
     }
 }
@@ -39,6 +41,7 @@ function Save-Config {
         Ports = $script:Config.Ports
         Host = $script:Config.Host
         User = $script:Config.User
+        SshPort = $script:Config.SshPort
     } | ConvertTo-Json | Set-Content $script:Config.ConfigFile
 }
 
@@ -74,6 +77,7 @@ function Start-PortForward {
         if (-not (Test-PortInUse -Port $port)) {
             $sshArgs = @(
                 "-N",
+                "-p", "$($script:Config.SshPort)",
                 "-o", "ServerAliveInterval=30",
                 "-o", "ServerAliveCountMax=3",
                 "-o", "ExitOnForwardFailure=yes",
@@ -284,6 +288,7 @@ $script:AppIcon = Create-AppIcon
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -295,10 +300,13 @@ $script:AppIcon = Create-AppIcon
                 <TextBlock Text="Host" FontSize="12" Foreground="#666666" Margin="0,0,8,4" Grid.Column="0" Grid.Row="0"/>
                 <TextBox x:Name="HostInput" Style="{StaticResource ModernTextBox}" Grid.Column="0" Grid.Row="1" Margin="0,0,8,0"/>
 
-                <TextBlock Text="User" FontSize="12" Foreground="#666666" Margin="8,0,8,4" Grid.Column="1" Grid.Row="0"/>
-                <TextBox x:Name="UserInput" Style="{StaticResource ModernTextBox}" Grid.Column="1" Grid.Row="1" Margin="8,0,8,0"/>
+                <TextBlock Text="SSH Port" FontSize="12" Foreground="#666666" Margin="8,0,8,4" Grid.Column="1" Grid.Row="0"/>
+                <TextBox x:Name="SshPortInput" Style="{StaticResource ModernTextBox}" Grid.Column="1" Grid.Row="1" Margin="8,0,8,0"/>
 
-                <Button x:Name="SaveBtn" Grid.Column="2" Grid.Row="1" Style="{StaticResource ModernButton}" Padding="12,8" ToolTip="Save Settings">
+                <TextBlock Text="User" FontSize="12" Foreground="#666666" Margin="8,0,8,4" Grid.Column="2" Grid.Row="0"/>
+                <TextBox x:Name="UserInput" Style="{StaticResource ModernTextBox}" Grid.Column="2" Grid.Row="1" Margin="8,0,8,0"/>
+
+                <Button x:Name="SaveBtn" Grid.Column="3" Grid.Row="1" Style="{StaticResource ModernButton}" Padding="12,8" ToolTip="Save Settings">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                         <TextBlock Text="Save" Margin="6,0,0,0" VerticalAlignment="Center"/>
@@ -418,6 +426,7 @@ $window.Icon = [System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon(
 
 # Get Controls
 $hostInput = $window.FindName("HostInput")
+$sshPortInput = $window.FindName("SshPortInput")
 $userInput = $window.FindName("UserInput")
 $saveBtn = $window.FindName("SaveBtn")
 $connectionStatus = $window.FindName("ConnectionStatus")
@@ -433,6 +442,7 @@ $statusText = $window.FindName("StatusText")
 
 # Set initial values
 $hostInput.Text = $script:Config.Host
+$sshPortInput.Text = $script:Config.SshPort.ToString()
 $userInput.Text = $script:Config.User
 
 function Update-PortList {
@@ -576,6 +586,13 @@ $autoReconnectCheck.Add_Unchecked({ $script:AutoReconnect = $false })
 $saveBtn.Add_Click({
     $script:Config.Host = $hostInput.Text
     $script:Config.User = $userInput.Text
+    $sshPortText = $sshPortInput.Text.Trim()
+    if ($sshPortText -match '^\d+$') {
+        $sshPort = [int]$sshPortText
+        if ($sshPort -gt 0 -and $sshPort -lt 65536) {
+            $script:Config.SshPort = $sshPort
+        }
+    }
     Save-Config
     $statusText.Text = "Settings saved!"
 })
