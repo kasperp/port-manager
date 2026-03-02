@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: PortManager v__VERSION__
+          releaseBody: |
+            ## Install
+            - **PortManager_*_x64-setup.exe** — NSIS installer (recommended)
+            - **PortManager_*_x64_en-US.msi** — MSI installer
+            - **port-manager.exe** — Portable executable (no install needed)
+
+            After first launch, tick **Run on startup** in the app to register it with Windows.
+          releaseDraft: false
+          prerelease: false

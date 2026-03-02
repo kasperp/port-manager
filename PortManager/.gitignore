@@ -1,0 +1,9 @@
+ports.json
+
+# Build artifacts
+dist/
+src-tauri/target/
+node_modules/
+
+# Tauri generated schema
+src-tauri/gen/
