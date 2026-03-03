@@ -41,11 +41,11 @@ pub fn run() {
                 let _ = w.set_focus();
             }
 
-            // Start SSH tunnels on launch
+            // Start SSH tunnels on launch using the active profile
             {
                 let mut s = shared.lock().unwrap();
-                let config = s.config.clone();
-                tunnel::start_all(&mut s.tunnels, &config);
+                let profile = s.config.active_profile().clone();
+                tunnel::start_all(&mut s.tunnels, &profile);
             }
 
             Ok(())
@@ -61,6 +61,11 @@ pub fn run() {
             commands::get_port_statuses,
             commands::set_startup_enabled,
             commands::get_startup_enabled,
+            commands::switch_profile,
+            commands::create_profile,
+            commands::delete_profile,
+            commands::get_ssh_hosts,
+            commands::import_ssh_profile,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -75,8 +80,16 @@ pub fn run() {
 fn build_tray_menu(
     app: &AppHandle,
     statuses: &[status::PortStatusInfo],
+    profile_name: &str,
 ) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, "show", "Show Port Manager", true, None::<&str>)?;
+    let profile_label = MenuItem::with_id(
+        app,
+        "profile-label",
+        format!("Profile: {}", profile_name),
+        false,
+        None::<&str>,
+    )?;
     let sep1 = PredefinedMenuItem::separator(app)?;
 
     let port_items: Vec<MenuItem<tauri::Wry>> = statuses
@@ -99,7 +112,7 @@ fn build_tray_menu(
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    let mut all: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![&show, &sep1];
+    let mut all: Vec<&dyn IsMenuItem<tauri::Wry>> = vec![&show, &profile_label, &sep1];
     for item in &port_items {
         all.push(item);
     }
@@ -116,7 +129,7 @@ fn build_tray_menu(
 }
 
 fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
-    let menu = build_tray_menu(app, &[])?;
+    let menu = build_tray_menu(app, &[], "Default")?;
 
     let state_menu = state.clone();
 
@@ -134,8 +147,8 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
             }
             "start" => {
                 let mut s = state_menu.lock().unwrap();
-                let cfg = s.config.clone();
-                tunnel::start_all(&mut s.tunnels, &cfg);
+                let profile = s.config.active_profile().clone();
+                tunnel::start_all(&mut s.tunnels, &profile);
             }
             "stop" => {
                 let mut s = state_menu.lock().unwrap();
@@ -173,17 +186,17 @@ async fn background_task(app: AppHandle, state: SharedState) {
     loop {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
-        let statuses = {
+        let (statuses, profile_name) = {
             let mut s = state.lock().unwrap();
             let auto = s.auto_reconnect;
-            let config = s.config.clone();
+            let profile = s.config.active_profile().clone();
 
             if auto {
                 let s = &mut *s;
-                tunnel::reconnect_dead(&mut s.tunnels, &mut s.tunnel_cooldowns, &config);
+                tunnel::reconnect_dead(&mut s.tunnels, &mut s.tunnel_cooldowns, &profile);
             }
 
-            config
+            let statuses = profile
                 .ports
                 .iter()
                 .map(|&port| {
@@ -199,12 +212,15 @@ async fn background_task(app: AppHandle, state: SharedState) {
                         pid,
                     }
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+
+            let name = profile.name.clone();
+            (statuses, name)
         };
 
         let _ = app.emit("port-status-update", &statuses);
         update_tray_icon(&app, &statuses);
-        if let Ok(menu) = build_tray_menu(&app, &statuses) {
+        if let Ok(menu) = build_tray_menu(&app, &statuses, &profile_name) {
             if let Some(tray) = app.tray_by_id("main") {
                 let _ = tray.set_menu(Some(menu));
             }

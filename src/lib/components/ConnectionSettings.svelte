@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { config, saveSettings, statusMessage } from "../stores/portManager";
+  import { activeProfile, saveSettings, statusMessage } from "../stores/portManager";
 
   let host = "";
   let user = "";
@@ -12,9 +12,9 @@
   let prevSshPort = 22;
 
   $: {
-    const sh = $config.host;
-    const su = $config.user;
-    const sp = $config.ssh_port;
+    const sh = $activeProfile.host;
+    const su = $activeProfile.user;
+    const sp = $activeProfile.ssh_port;
     if (host === prevHost) host = sh;
     if (user === prevUser) user = su;
     if (sshPort === prevSshPort) sshPort = sp;
