@@ -179,7 +179,8 @@ async fn background_task(app: AppHandle, state: SharedState) {
             let config = s.config.clone();
 
             if auto {
-                tunnel::reconnect_dead(&mut s.tunnels, &config);
+                let s = &mut *s;
+                tunnel::reconnect_dead(&mut s.tunnels, &mut s.tunnel_cooldowns, &config);
             }
 
             config
