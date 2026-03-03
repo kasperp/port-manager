@@ -6,11 +6,24 @@ export interface PortStatusInfo {
   pid: number | null;
 }
 
-export interface Config {
+export interface Profile {
+  name: string;
   host: string;
   user: string;
   ssh_port: number;
   ports: number[];
+}
+
+export interface Config {
+  active_profile: string;
+  profiles: Profile[];
+}
+
+export interface SshHostEntry {
+  name: string;
+  hostname: string;
+  user: string;
+  port: number;
 }
 
 export type AggregateStatus =

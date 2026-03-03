@@ -5,7 +5,7 @@ use std::time::Instant;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use crate::config::Config;
+use crate::config::Profile;
 use crate::status::is_port_active;
 
 pub struct TunnelProcess {
@@ -14,12 +14,12 @@ pub struct TunnelProcess {
 }
 
 /// Spawn an SSH tunnel for a single port.
-pub fn spawn_tunnel(port: u16, config: &Config) -> Result<TunnelProcess, String> {
+pub fn spawn_tunnel(port: u16, profile: &Profile) -> Result<TunnelProcess, String> {
     let mut cmd = Command::new("ssh");
     cmd.args([
         "-N",
         "-p",
-        &config.ssh_port.to_string(),
+        &profile.ssh_port.to_string(),
         "-o",
         "ServerAliveInterval=30",
         "-o",
@@ -30,28 +30,30 @@ pub fn spawn_tunnel(port: u16, config: &Config) -> Result<TunnelProcess, String>
         "StrictHostKeyChecking=accept-new",
         "-L",
         &format!("127.0.0.1:{port}:127.0.0.1:{port}"),
-        &format!("{}@{}", config.user, config.host),
+        &format!("{}@{}", profile.user, profile.host),
     ])
     .stdin(Stdio::null())
     .stdout(Stdio::null())
     .stderr(Stdio::null());
     #[cfg(windows)]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    let child = cmd.spawn().map_err(|e| format!("Failed to spawn ssh: {e}"))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn ssh: {e}"))?;
 
     let pid = child.id();
     Ok(TunnelProcess { pid, child })
 }
 
 /// Start tunnels for all ports not already active.
-pub fn start_all(tunnels: &mut HashMap<u16, TunnelProcess>, config: &Config) -> Vec<String> {
+pub fn start_all(tunnels: &mut HashMap<u16, TunnelProcess>, profile: &Profile) -> Vec<String> {
     let mut errors = Vec::new();
-    if config.host.is_empty() || config.user.is_empty() {
+    if profile.host.is_empty() || profile.user.is_empty() {
         return errors;
     }
-    for &port in &config.ports {
+    for &port in &profile.ports {
         if !is_port_active(port) && !tunnels.contains_key(&port) {
-            match spawn_tunnel(port, config) {
+            match spawn_tunnel(port, profile) {
                 Ok(proc) => {
                     tunnels.insert(port, proc);
                 }
@@ -77,9 +79,9 @@ const RECONNECT_COOLDOWN_SECS: u64 = 60;
 pub fn reconnect_dead(
     tunnels: &mut HashMap<u16, TunnelProcess>,
     cooldowns: &mut HashMap<u16, Instant>,
-    config: &Config,
+    profile: &Profile,
 ) {
-    if config.host.is_empty() || config.user.is_empty() {
+    if profile.host.is_empty() || profile.user.is_empty() {
         return;
     }
     let now = Instant::now();
@@ -96,7 +98,7 @@ pub fn reconnect_dead(
         still_running
     });
     // Restart missing ports, respecting cooldown
-    for &port in &config.ports {
+    for &port in &profile.ports {
         if is_port_active(port) || tunnels.contains_key(&port) {
             continue;
         }
@@ -105,7 +107,7 @@ pub fn reconnect_dead(
                 continue;
             }
         }
-        if let Ok(proc) = spawn_tunnel(port, config) {
+        if let Ok(proc) = spawn_tunnel(port, profile) {
             cooldowns.remove(&port);
             tunnels.insert(port, proc);
         }

@@ -5,8 +5,10 @@
   import ConnectionSettings from "./lib/components/ConnectionSettings.svelte";
   import Header from "./lib/components/Header.svelte";
   import PortList from "./lib/components/PortList.svelte";
+  import ProfileSelector from "./lib/components/ProfileSelector.svelte";
   import {
     loadConfig,
+    loadSshHosts,
     loadStartupStatus,
     loadStatuses,
     startAll,
@@ -26,6 +28,7 @@
     });
 
     await loadConfig();
+    await loadSshHosts();
     await loadStartupStatus();
     await startListening();
 
@@ -41,6 +44,7 @@
 
 <main>
   <Header />
+  <ProfileSelector />
   <ConnectionSettings />
   <PortList />
   <ActionBar />

@@ -1,20 +1,46 @@
 import { derived, writable } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AggregateStatus, Config, PortStatusInfo } from "../types";
+import type {
+  AggregateStatus,
+  Config,
+  PortStatusInfo,
+  Profile,
+  SshHostEntry,
+} from "../types";
 
 // Core stores
 export const config = writable<Config>({
-  host: "",
-  user: "",
-  ssh_port: 22,
-  ports: [],
+  active_profile: "Default",
+  profiles: [
+    { name: "Default", host: "", user: "", ssh_port: 22, ports: [] },
+  ],
 });
 export const portStatuses = writable<PortStatusInfo[]>([]);
 export const autoReconnect = writable(true);
 export const startupEnabled = writable(false);
 export const statusMessage = writable("Ready");
 export const isPending = writable(false);
+export const sshHosts = writable<SshHostEntry[]>([]);
+
+// Derived: the currently active profile
+export const activeProfile = derived<typeof config, Profile>(
+  config,
+  ($config) => {
+    const found = $config.profiles.find(
+      (p) => p.name === $config.active_profile
+    );
+    return (
+      found ?? $config.profiles[0] ?? {
+        name: "Default",
+        host: "",
+        user: "",
+        ssh_port: 22,
+        ports: [],
+      }
+    );
+  }
+);
 
 // Derived aggregate status for the header
 export const aggregateStatus = derived<
@@ -44,20 +70,39 @@ export async function loadStartupStatus() {
   startupEnabled.set(enabled);
 }
 
+export async function loadSshHosts() {
+  const hosts = await invoke<SshHostEntry[]>("get_ssh_hosts");
+  sshHosts.set(hosts);
+}
+
 export async function saveSettings(
   host: string,
   user: string,
   sshPort: number
 ) {
   await invoke("save_settings", { host, user, sshPort });
-  config.update((c) => ({ ...c, host, user, ssh_port: sshPort }));
+  config.update((c) => ({
+    ...c,
+    profiles: c.profiles.map((p) =>
+      p.name === c.active_profile
+        ? { ...p, host, user, ssh_port: sshPort }
+        : p
+    ),
+  }));
   statusMessage.set("Settings saved!");
 }
 
 export async function addPort(port: number): Promise<string | null> {
   try {
     await invoke("add_port", { port });
-    config.update((c) => ({ ...c, ports: [...c.ports, port] }));
+    config.update((c) => ({
+      ...c,
+      profiles: c.profiles.map((p) =>
+        p.name === c.active_profile
+          ? { ...p, ports: [...p.ports, port] }
+          : p
+      ),
+    }));
     await loadStatuses();
     statusMessage.set(`Added port ${port}`);
     return null;
@@ -68,7 +113,14 @@ export async function addPort(port: number): Promise<string | null> {
 
 export async function removePort(port: number) {
   await invoke("remove_port", { port });
-  config.update((c) => ({ ...c, ports: c.ports.filter((p) => p !== port) }));
+  config.update((c) => ({
+    ...c,
+    profiles: c.profiles.map((p) =>
+      p.name === c.active_profile
+        ? { ...p, ports: p.ports.filter((pp) => pp !== port) }
+        : p
+    ),
+  }));
   portStatuses.update((s) => s.filter((ps) => ps.port !== port));
   statusMessage.set(`Removed port ${port}`);
 }
@@ -106,6 +158,73 @@ export async function setStartupEnabled(enabled: boolean) {
     startupEnabled.set(enabled);
   } catch (e) {
     statusMessage.set(`Startup toggle failed: ${e}`);
+  }
+}
+
+// ---- Profile Actions ----
+
+export async function switchProfile(name: string) {
+  isPending.set(true);
+  statusMessage.set(`Switching to profile "${name}"...`);
+  try {
+    const cfg = await invoke<Config>("switch_profile", { name });
+    config.set(cfg);
+    portStatuses.set([]);
+    await loadStatuses();
+    statusMessage.set(`Switched to "${name}"`);
+  } catch (e) {
+    statusMessage.set(`Switch failed: ${e}`);
+  } finally {
+    isPending.set(false);
+  }
+}
+
+export async function createProfile(
+  name: string,
+  host: string,
+  user: string,
+  sshPort: number
+): Promise<string | null> {
+  try {
+    const cfg = await invoke<Config>("create_profile", {
+      name,
+      host,
+      user,
+      sshPort,
+    });
+    config.set(cfg);
+    portStatuses.set([]);
+    statusMessage.set(`Created and switched to profile "${name}"`);
+    return null;
+  } catch (e) {
+    return String(e);
+  }
+}
+
+export async function deleteProfile(name: string): Promise<string | null> {
+  try {
+    const cfg = await invoke<Config>("delete_profile", { name });
+    config.set(cfg);
+    portStatuses.set([]);
+    await loadStatuses();
+    statusMessage.set(`Deleted profile "${name}"`);
+    return null;
+  } catch (e) {
+    return String(e);
+  }
+}
+
+export async function importSshProfile(
+  sshHostName: string
+): Promise<string | null> {
+  try {
+    const cfg = await invoke<Config>("import_ssh_profile", { sshHostName });
+    config.set(cfg);
+    portStatuses.set([]);
+    statusMessage.set(`Imported and switched to profile "${sshHostName}"`);
+    return null;
+  } catch (e) {
+    return String(e);
   }
 }
 
