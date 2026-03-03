@@ -112,6 +112,11 @@ pub fn create_profile(
     };
     s.config.profiles.push(profile);
 
+    // Stop tunnels from the current profile and switch to the new one
+    tunnel::stop_all(&mut s.tunnels);
+    s.tunnel_cooldowns.clear();
+    s.config.active_profile = name;
+
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     save_config(&data_dir, &s.config)?;
 
@@ -183,13 +188,18 @@ pub fn import_ssh_profile(
     }
 
     let profile = Profile {
-        name: profile_name,
+        name: profile_name.clone(),
         host: entry.hostname.clone(),
         user: entry.user.clone(),
         ssh_port: entry.port,
         ports: Vec::new(),
     };
     s.config.profiles.push(profile);
+
+    // Stop tunnels from the current profile and switch to the imported one
+    tunnel::stop_all(&mut s.tunnels);
+    s.tunnel_cooldowns.clear();
+    s.config.active_profile = profile_name;
 
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     save_config(&data_dir, &s.config)?;

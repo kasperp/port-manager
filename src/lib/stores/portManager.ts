@@ -193,7 +193,8 @@ export async function createProfile(
       sshPort,
     });
     config.set(cfg);
-    statusMessage.set(`Created profile "${name}"`);
+    portStatuses.set([]);
+    statusMessage.set(`Created and switched to profile "${name}"`);
     return null;
   } catch (e) {
     return String(e);
@@ -219,7 +220,8 @@ export async function importSshProfile(
   try {
     const cfg = await invoke<Config>("import_ssh_profile", { sshHostName });
     config.set(cfg);
-    statusMessage.set(`Imported SSH host "${sshHostName}" as profile`);
+    portStatuses.set([]);
+    statusMessage.set(`Imported and switched to profile "${sshHostName}"`);
     return null;
   } catch (e) {
     return String(e);
