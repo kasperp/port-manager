@@ -106,7 +106,7 @@ fn build_tray_menu(
         .map(|s| {
             let (dot, label_text) = match s.status {
                 PortStatus::Forwarding => ("●", "Forwarding"),
-                PortStatus::RemoteDown => ("●", "Remote Down"),
+                PortStatus::RemoteDown => ("●", "Not Listening"),
                 PortStatus::Reconnecting => ("●", "Reconnecting"),
                 PortStatus::TunnelDown => ("●", "Tunnel Down"),
                 PortStatus::PortInUse => ("●", "Port In Use"),

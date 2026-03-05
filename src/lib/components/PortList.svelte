@@ -61,16 +61,6 @@
         {/each}
       </div>
     </div>
-    <div class="list-actions">
-      <button
-        title="Remove selected port"
-        on:click={handleRemove}
-        disabled={selectedPort === null}
-        class="icon-btn"
-      >
-        &minus;
-      </button>
-    </div>
   </div>
   <div class="add-row">
     <input
@@ -82,6 +72,14 @@
       on:keydown={handleKeydown}
     />
     <button on:click={handleAdd} class="add-btn">+ Add</button>
+    <button
+      title="Remove selected port"
+      on:click={handleRemove}
+      disabled={selectedPort === null}
+      class="icon-btn"
+    >
+      &minus;
+    </button>
   </div>
 </div>
 
@@ -92,7 +90,7 @@
     color: #444;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    margin-bottom: 6px;
+    margin: 0 0 6px;
     flex-shrink: 0;
   }
 
@@ -104,8 +102,6 @@
   }
 
   .list-area {
-    display: flex;
-    gap: 8px;
     flex: 1;
     min-height: 0;
   }
@@ -145,12 +141,6 @@
     font-size: 13px;
     padding: 20px;
     text-align: center;
-  }
-
-  .list-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
   }
 
   .icon-btn {

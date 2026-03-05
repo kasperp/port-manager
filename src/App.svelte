@@ -64,6 +64,7 @@
   .status-bar {
     font-size: 12px;
     color: #888;
+    margin: 0;
     padding-top: 4px;
     flex-shrink: 0;
   }

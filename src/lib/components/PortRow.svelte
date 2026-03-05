@@ -20,7 +20,7 @@
     ? "Pending"
     : {
         Forwarding: "Forwarding",
-        RemoteDown: "Remote Down",
+        RemoteDown: "Not Listening",
         Reconnecting: "Reconnecting",
         TunnelDown: "Tunnel Down",
         PortInUse: "Port In Use",
@@ -53,7 +53,7 @@
     ? "Waiting for SSH connection to establish"
     : {
         Forwarding: "Tunnel is up and remote service is accepting connections",
-        RemoteDown: "Tunnel is up but the remote service is not running",
+        RemoteDown: "Tunnel is up but nothing is listening on this port",
         Reconnecting: "Tunnel died — automatically reconnecting",
         TunnelDown: "Tunnel died — auto-reconnect is off or in cooldown",
         PortInUse: "Another process is already listening on this port",

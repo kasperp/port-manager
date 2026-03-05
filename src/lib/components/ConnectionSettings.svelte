@@ -91,27 +91,29 @@
     </div>
   </div>
 
-  <div class="rate-limit-row">
-    <span class="rate-limit-label">Rate limit</span>
-    <div class="rate-limit-fields">
-      <input
-        id="rate-limit-max"
-        bind:value={rateLimitMax}
-        type="number"
-        min="1"
-        class="rate-limit-input"
-        on:keydown={handleKeydown}
-      />
-      <span class="rate-limit-text">conn /</span>
-      <input
-        id="rate-limit-window"
-        bind:value={rateLimitWindowSecs}
-        type="number"
-        min="1"
-        class="rate-limit-input"
-        on:keydown={handleKeydown}
-      />
-      <span class="rate-limit-text">sec</span>
+  <div class="bottom-row">
+    <div class="rate-limit-row">
+      <span class="rate-limit-label">Rate limit</span>
+      <div class="rate-limit-fields">
+        <input
+          id="rate-limit-max"
+          bind:value={rateLimitMax}
+          type="number"
+          min="1"
+          class="rate-limit-input"
+          on:keydown={handleKeydown}
+        />
+        <span class="rate-limit-text">conn /</span>
+        <input
+          id="rate-limit-window"
+          bind:value={rateLimitWindowSecs}
+          type="number"
+          min="1"
+          class="rate-limit-input"
+          on:keydown={handleKeydown}
+        />
+        <span class="rate-limit-text">sec</span>
+      </div>
     </div>
     <button on:click={handleSave}>Save</button>
   </div>
@@ -181,13 +183,20 @@
     border-color: #0078d4;
   }
 
-  .rate-limit-row {
+  .bottom-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px solid #e8e8e8;
+  }
+
+  .rate-limit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .rate-limit-label {
