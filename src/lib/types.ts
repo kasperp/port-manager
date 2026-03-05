@@ -12,6 +12,8 @@ export interface Profile {
   user: string;
   ssh_port: number;
   ports: number[];
+  rate_limit_max: number;
+  rate_limit_window_secs: number;
 }
 
 export interface Config {

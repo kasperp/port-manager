@@ -45,14 +45,20 @@ pub fn run() {
             {
                 let mut s = shared.lock().unwrap();
                 let profile = s.config.active_profile().clone();
-                tunnel::start_all(&mut s.tunnels, &profile);
+                let profile_name = profile.name.clone();
+                let s = &mut *s;
+                let attempts = s
+                    .connection_attempts
+                    .entry(profile_name)
+                    .or_default();
+                tunnel::start_all(&mut s.tunnels, &profile, attempts);
             }
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
-            commands::save_settings,
+            commands::save_profile_settings,
             commands::add_port,
             commands::remove_port,
             commands::start_all,
@@ -148,7 +154,13 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
             "start" => {
                 let mut s = state_menu.lock().unwrap();
                 let profile = s.config.active_profile().clone();
-                tunnel::start_all(&mut s.tunnels, &profile);
+                let profile_name = profile.name.clone();
+                let s = &mut *s;
+                let attempts = s
+                    .connection_attempts
+                    .entry(profile_name)
+                    .or_default();
+                tunnel::start_all(&mut s.tunnels, &profile, attempts);
             }
             "stop" => {
                 let mut s = state_menu.lock().unwrap();
@@ -193,7 +205,17 @@ async fn background_task(app: AppHandle, state: SharedState) {
 
             if auto {
                 let s = &mut *s;
-                tunnel::reconnect_dead(&mut s.tunnels, &mut s.tunnel_cooldowns, &profile);
+                let profile_name = profile.name.clone();
+                let attempts = s
+                    .connection_attempts
+                    .entry(profile_name)
+                    .or_default();
+                tunnel::reconnect_dead(
+                    &mut s.tunnels,
+                    &mut s.tunnel_cooldowns,
+                    &profile,
+                    attempts,
+                );
             }
 
             let statuses = profile

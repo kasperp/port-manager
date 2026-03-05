@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -10,6 +10,9 @@ pub struct AppState {
     pub tunnels: HashMap<u16, TunnelProcess>,
     pub auto_reconnect: bool,
     pub tunnel_cooldowns: HashMap<u16, Instant>,
+    /// Timestamps of recent SSH connection attempts, keyed by profile name.
+    /// Used for rate-limiting connection spawns to avoid triggering firewall rules.
+    pub connection_attempts: HashMap<String, VecDeque<Instant>>,
 }
 
 impl AppState {
@@ -19,6 +22,7 @@ impl AppState {
             tunnels: HashMap::new(),
             auto_reconnect: true,
             tunnel_cooldowns: HashMap::new(),
+            connection_attempts: HashMap::new(),
         }
     }
 }

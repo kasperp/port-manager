@@ -13,12 +13,14 @@ pub fn get_config(state: State<SharedState>) -> Config {
 }
 
 #[tauri::command]
-pub fn save_settings(
+pub fn save_profile_settings(
     app: AppHandle,
     state: State<SharedState>,
     host: String,
     user: String,
     ssh_port: u16,
+    rate_limit_max: u32,
+    rate_limit_window_secs: u32,
 ) -> Result<(), String> {
     let mut s = state.lock().unwrap();
     {
@@ -26,6 +28,8 @@ pub fn save_settings(
         profile.host = host;
         profile.user = user;
         profile.ssh_port = ssh_port;
+        profile.rate_limit_max = rate_limit_max;
+        profile.rate_limit_window_secs = rate_limit_window_secs;
     }
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     save_config(&data_dir, &s.config)
@@ -109,6 +113,8 @@ pub fn create_profile(
         user,
         ssh_port,
         ports: Vec::new(),
+        rate_limit_max: 6,
+        rate_limit_window_secs: 30,
     };
     s.config.profiles.push(profile);
 
@@ -193,6 +199,8 @@ pub fn import_ssh_profile(
         user: entry.user.clone(),
         ssh_port: entry.port,
         ports: Vec::new(),
+        rate_limit_max: 6,
+        rate_limit_window_secs: 30,
     };
     s.config.profiles.push(profile);
 
@@ -213,7 +221,10 @@ pub fn import_ssh_profile(
 pub fn start_all(state: State<SharedState>) -> Vec<String> {
     let mut s = state.lock().unwrap();
     let profile = s.config.active_profile().clone();
-    tunnel::start_all(&mut s.tunnels, &profile)
+    let profile_name = profile.name.clone();
+    let s = &mut *s;
+    let attempts = s.connection_attempts.entry(profile_name).or_default();
+    tunnel::start_all(&mut s.tunnels, &profile, attempts)
 }
 
 #[tauri::command]

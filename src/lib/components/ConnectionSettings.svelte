@@ -1,26 +1,36 @@
 <script lang="ts">
-  import { activeProfile, saveSettings, statusMessage } from "../stores/portManager";
+  import { activeProfile, saveProfileSettings, statusMessage } from "../stores/portManager";
 
   let host = "";
   let user = "";
   let sshPort = 22;
+  let rateLimitMax = 6;
+  let rateLimitWindowSecs = 30;
 
   // Track the last store values we applied so we can detect user edits.
   // Only update local vars when the store changes AND the user hasn't diverged.
   let prevHost = "";
   let prevUser = "";
   let prevSshPort = 22;
+  let prevRateLimitMax = 6;
+  let prevRateLimitWindowSecs = 30;
 
   $: {
     const sh = $activeProfile.host;
     const su = $activeProfile.user;
     const sp = $activeProfile.ssh_port;
+    const rlm = $activeProfile.rate_limit_max;
+    const rlw = $activeProfile.rate_limit_window_secs;
     if (host === prevHost) host = sh;
     if (user === prevUser) user = su;
     if (sshPort === prevSshPort) sshPort = sp;
+    if (rateLimitMax === prevRateLimitMax) rateLimitMax = rlm;
+    if (rateLimitWindowSecs === prevRateLimitWindowSecs) rateLimitWindowSecs = rlw;
     prevHost = sh;
     prevUser = su;
     prevSshPort = sp;
+    prevRateLimitMax = rlm;
+    prevRateLimitWindowSecs = rlw;
   }
 
   async function handleSave() {
@@ -29,7 +39,17 @@
       statusMessage.set("Invalid SSH port number");
       return;
     }
-    await saveSettings(host.trim(), user.trim(), port);
+    const max = Number(rateLimitMax);
+    const window = Number(rateLimitWindowSecs);
+    if (!max || max < 1) {
+      statusMessage.set("Max connections must be at least 1");
+      return;
+    }
+    if (!window || window < 1) {
+      statusMessage.set("Window must be at least 1 second");
+      return;
+    }
+    await saveProfileSettings(host.trim(), user.trim(), port, max, window);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -68,6 +88,30 @@
         placeholder="username"
         on:keydown={handleKeydown}
       />
+    </div>
+  </div>
+
+  <div class="rate-limit-row">
+    <span class="rate-limit-label">Rate limit</span>
+    <div class="rate-limit-fields">
+      <input
+        id="rate-limit-max"
+        bind:value={rateLimitMax}
+        type="number"
+        min="1"
+        class="rate-limit-input"
+        on:keydown={handleKeydown}
+      />
+      <span class="rate-limit-text">conn /</span>
+      <input
+        id="rate-limit-window"
+        bind:value={rateLimitWindowSecs}
+        type="number"
+        min="1"
+        class="rate-limit-input"
+        on:keydown={handleKeydown}
+      />
+      <span class="rate-limit-text">sec</span>
     </div>
     <button on:click={handleSave}>Save</button>
   </div>
@@ -135,5 +179,41 @@
   button:hover {
     background: #e5e5e5;
     border-color: #0078d4;
+  }
+
+  .rate-limit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e8e8e8;
+  }
+
+  .rate-limit-label {
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .rate-limit-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .rate-limit-input {
+    width: 60px;
+    padding: 5px 8px;
+    text-align: center;
+  }
+
+  .rate-limit-text {
+    font-size: 12px;
+    color: #666;
+    white-space: nowrap;
   }
 </style>

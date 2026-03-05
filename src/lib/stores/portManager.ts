@@ -13,7 +13,15 @@ import type {
 export const config = writable<Config>({
   active_profile: "Default",
   profiles: [
-    { name: "Default", host: "", user: "", ssh_port: 22, ports: [] },
+    {
+      name: "Default",
+      host: "",
+      user: "",
+      ssh_port: 22,
+      ports: [],
+      rate_limit_max: 6,
+      rate_limit_window_secs: 30,
+    },
   ],
 });
 export const portStatuses = writable<PortStatusInfo[]>([]);
@@ -37,6 +45,8 @@ export const activeProfile = derived<typeof config, Profile>(
         user: "",
         ssh_port: 22,
         ports: [],
+        rate_limit_max: 6,
+        rate_limit_window_secs: 30,
       }
     );
   }
@@ -75,17 +85,32 @@ export async function loadSshHosts() {
   sshHosts.set(hosts);
 }
 
-export async function saveSettings(
+export async function saveProfileSettings(
   host: string,
   user: string,
-  sshPort: number
+  sshPort: number,
+  rateLimitMax: number,
+  rateLimitWindowSecs: number
 ) {
-  await invoke("save_settings", { host, user, sshPort });
+  await invoke("save_profile_settings", {
+    host,
+    user,
+    sshPort,
+    rateLimitMax,
+    rateLimitWindowSecs,
+  });
   config.update((c) => ({
     ...c,
     profiles: c.profiles.map((p) =>
       p.name === c.active_profile
-        ? { ...p, host, user, ssh_port: sshPort }
+        ? {
+            ...p,
+            host,
+            user,
+            ssh_port: sshPort,
+            rate_limit_max: rateLimitMax,
+            rate_limit_window_secs: rateLimitWindowSecs,
+          }
         : p
     ),
   }));
