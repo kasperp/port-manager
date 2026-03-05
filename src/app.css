@@ -7,11 +7,12 @@
 html,
 body {
   height: 100%;
-  font-family: "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
   background: white;
-  color: #1a1a1a;
+  color: #111827;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 #app {
@@ -19,10 +20,9 @@ body {
   overflow-y: auto;
 }
 
-input {
+input,
+button,
+select {
   font-family: inherit;
-}
-
-button {
-  font-family: inherit;
+  font-size: inherit;
 }

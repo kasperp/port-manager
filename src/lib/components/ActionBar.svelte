@@ -9,8 +9,8 @@
 
 <div class="action-bar">
   <div class="tunnel-buttons">
-    <button class="primary" on:click={startAll}>▶ Start All</button>
-    <button on:click={stopAll}>■ Stop All</button>
+    <button class="btn-primary" on:click={startAll}>Start All</button>
+    <button class="btn-secondary" on:click={stopAll}>Stop All</button>
   </div>
   <label class="startup-toggle">
     <input
@@ -27,38 +27,42 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
   }
 
   .tunnel-buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
   }
 
-  button {
-    padding: 9px 20px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    background: #f0f0f0;
+  .btn-primary {
+    padding: 7px 16px;
+    background: #0078d4;
+    color: white;
+    border: 1px solid transparent;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.15s;
+  }
+
+  .btn-primary:hover {
+    background: #106ebe;
+  }
+
+  .btn-secondary {
+    padding: 7px 16px;
+    background: white;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
     transition: background 0.15s, border-color 0.15s;
   }
 
-  button.primary {
-    background: #0078d4;
-    color: white;
-    border-color: #0078d4;
-  }
-
-  button.primary:hover {
-    background: #106ebe;
-    border-color: #106ebe;
-  }
-
-  button:not(.primary):hover {
-    background: #e5e5e5;
-    border-color: #0078d4;
+  .btn-secondary:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
   }
 
   .startup-toggle {
@@ -66,7 +70,8 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #555;
+    color: #6b7280;
     cursor: pointer;
+    user-select: none;
   }
 </style>

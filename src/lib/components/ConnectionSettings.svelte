@@ -121,10 +121,11 @@
 
 <style>
   .settings-card {
-    border: 1px solid #e0e0e0;
-    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
     padding: 14px;
-    background: #fafafa;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   }
 
   .field-group {
@@ -146,17 +147,16 @@
 
   label {
     font-size: 11px;
-    color: #666;
+    color: #6b7280;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
   }
 
   input {
     padding: 7px 10px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    font-size: 13px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
     background: white;
     transition: border-color 0.15s;
   }
@@ -164,23 +164,23 @@
   input:focus {
     outline: none;
     border-color: #0078d4;
+    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
   }
 
   button {
-    padding: 8px 16px;
-    background: #f0f0f0;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
+    padding: 7px 16px;
+    background: #0078d4;
+    color: white;
+    border: 1px solid transparent;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 13px;
+    font-weight: 500;
     white-space: nowrap;
-    align-self: flex-end;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 0.15s;
   }
 
   button:hover {
-    background: #e5e5e5;
-    border-color: #0078d4;
+    background: #106ebe;
   }
 
   .bottom-row {
@@ -190,7 +190,7 @@
     gap: 8px;
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid #e8e8e8;
+    border-top: 1px solid #f3f4f6;
   }
 
   .rate-limit-row {
@@ -201,10 +201,10 @@
 
   .rate-limit-label {
     font-size: 11px;
-    color: #666;
+    color: #6b7280;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     flex-shrink: 0;
   }
 
@@ -222,7 +222,7 @@
 
   .rate-limit-text {
     font-size: 12px;
-    color: #666;
+    color: #6b7280;
     white-space: nowrap;
   }
 </style>

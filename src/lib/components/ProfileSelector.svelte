@@ -183,38 +183,42 @@
   .profile-select-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   label {
     font-size: 11px;
-    color: #666;
+    color: #6b7280;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     flex-shrink: 0;
   }
 
   select {
     flex: 1;
-    padding: 7px 10px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
     font-size: 13px;
     background: white;
+    color: #111827;
     cursor: pointer;
+    transition: border-color 0.15s;
   }
 
   select:focus {
     outline: none;
     border-color: #0078d4;
+    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
   }
 
   .icon-btn {
     padding: 5px 10px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    background: #f0f0f0;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: white;
+    color: #374151;
     cursor: pointer;
     font-size: 13px;
     white-space: nowrap;
@@ -222,63 +226,70 @@
   }
 
   .icon-btn:hover {
-    background: #e5e5e5;
-    border-color: #0078d4;
+    background: #f9fafb;
+    border-color: #d1d5db;
   }
 
   .import-btn {
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
+    color: #6b7280;
   }
 
   .delete-btn {
     color: #dc2626;
-    font-weight: bold;
     font-size: 16px;
     line-height: 1;
     padding: 3px 8px;
+    border-color: #fecaca;
   }
 
   .delete-btn:hover {
-    background: #fee2e2;
-    border-color: #dc2626;
+    background: #fef2f2;
+    border-color: #fca5a5;
   }
 
   .delete-confirm {
     color: #dc2626;
-    background: #fee2e2;
-    border-color: #dc2626;
+    background: #fef2f2;
+    border-color: #fca5a5;
     font-size: 12px;
+  }
+
+  .delete-confirm:hover {
+    background: #fee2e2;
   }
 
   .new-profile-form {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
   }
 
   .new-profile-form input {
     flex: 1;
     padding: 7px 10px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
     font-size: 13px;
+    transition: border-color 0.15s;
   }
 
   .new-profile-form input:focus {
     outline: none;
     border-color: #0078d4;
+    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
   }
 
   .new-profile-form button {
     padding: 7px 14px;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
+    border: 1px solid transparent;
+    border-radius: 6px;
     background: #0078d4;
     color: white;
     cursor: pointer;
-    font-size: 13px;
+    font-weight: 500;
     transition: background 0.15s;
   }
 
@@ -287,30 +298,30 @@
   }
 
   .cancel-btn {
-    background: #f0f0f0 !important;
-    color: #333 !important;
-    border-color: #d0d0d0 !important;
+    background: white !important;
+    color: #374151 !important;
+    border-color: #e5e7eb !important;
   }
 
   .cancel-btn:hover {
-    background: #e5e5e5 !important;
+    background: #f9fafb !important;
   }
 
   .import-list {
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     overflow: hidden;
   }
 
   .import-header {
     font-size: 11px;
-    color: #666;
+    color: #6b7280;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     padding: 8px 12px 4px;
-    margin: 0;
   }
 
   .import-item {
@@ -320,24 +331,24 @@
     width: 100%;
     padding: 8px 12px;
     border: none;
-    border-top: 1px solid #ebebeb;
+    border-top: 1px solid #f3f4f6;
     background: transparent;
     cursor: pointer;
-    font-size: 13px;
     text-align: left;
     transition: background 0.1s;
   }
 
   .import-item:hover {
-    background: #e5f1fb;
+    background: #f0f7ff;
   }
 
   .host-name {
     font-weight: 500;
+    color: #111827;
   }
 
   .host-detail {
-    color: #888;
+    color: #9ca3af;
     font-size: 12px;
   }
 </style>

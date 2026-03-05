@@ -35,8 +35,8 @@
         Reconnecting: "#f59e0b",
         TunnelDown: "#dc2626",
         PortInUse: "#3b82f6",
-        Stopped: "#6b7280",
-      }[portInfo.status] ?? "#6b7280";
+        Stopped: "#d1d5db",
+      }[portInfo.status] ?? "#d1d5db";
 
   $: textColor = pending
     ? "#f59e0b"
@@ -46,8 +46,8 @@
         Reconnecting: "#f59e0b",
         TunnelDown: "#dc2626",
         PortInUse: "#3b82f6",
-        Stopped: "#6b7280",
-      }[portInfo.status] ?? "#6b7280";
+        Stopped: "#9ca3af",
+      }[portInfo.status] ?? "#9ca3af";
 
   $: statusTooltip = pending
     ? "Waiting for SSH connection to establish"
@@ -60,6 +60,8 @@
         Stopped: "Not forwarding — right-click to start",
       }[portInfo.status] ?? "";
 
+  $: isForwarding = !pending && portInfo.status === "Forwarding";
+  $: isReconnecting = !pending && portInfo.status === "Reconnecting";
   $: isPortInUse = portInfo.status === "PortInUse";
   $: ownerLabel = portInfo.process_name
     ? `${portInfo.process_name} (${portInfo.owner_pid})`
@@ -125,7 +127,12 @@
 >
   <span class="port-number">{portInfo.port}</span>
   <span class="status-cell" title={statusTooltip}>
-    <span class="dot" style="background: {dotColor}"></span>
+    <span
+      class="dot"
+      class:dot-forwarding={isForwarding}
+      class:dot-reconnecting={isReconnecting}
+      style="background: {dotColor}"
+    ></span>
     <span style="color: {textColor}">{displayStatus}</span>
   </span>
   {#if isPortInUse && ownerLabel}
@@ -178,36 +185,63 @@
     display: grid;
     grid-template-columns: 80px 130px 1fr;
     padding: 9px 12px;
-    border-bottom: 1px solid #ebebeb;
+    border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
     font-size: 13px;
     user-select: none;
     transition: background 0.1s;
   }
 
+  .port-row:last-child {
+    border-bottom: none;
+  }
+
   .port-row:hover {
-    background: #f5f5f5;
+    background: #f9fafb;
   }
 
   .port-row.selected {
-    background: #e5f1fb;
+    background: #eff6ff;
+  }
+
+  .port-number {
+    font-weight: 500;
+    color: #374151;
   }
 
   .status-cell {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
   }
 
   .dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
   }
 
+  @keyframes glow-green {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+    50% { box-shadow: 0 0 0 4px rgba(22, 163, 74, 0); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+
+  .dot-forwarding {
+    animation: glow-green 2.5s ease-out infinite;
+  }
+
+  .dot-reconnecting {
+    animation: blink 1s ease-in-out infinite;
+  }
+
   .pid {
-    color: #888;
+    color: #9ca3af;
     font-size: 12px;
   }
 
@@ -231,9 +265,9 @@
     flex-shrink: 0;
     padding: 1px 8px;
     font-size: 11px;
-    border: 1px solid #dc2626;
-    border-radius: 3px;
-    background: #fff;
+    border: 1px solid #fca5a5;
+    border-radius: 4px;
+    background: white;
     color: #dc2626;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
@@ -241,7 +275,8 @@
 
   .kill-btn:hover:not(:disabled) {
     background: #dc2626;
-    color: #fff;
+    border-color: #dc2626;
+    color: white;
   }
 
   .kill-btn:disabled {
@@ -260,10 +295,10 @@
 
   .ctx-menu {
     position: fixed;
-    background: #fff;
-    border: 1px solid #d4d4d4;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
     padding: 4px 0;
     min-width: 120px;
     z-index: 1001;
@@ -278,11 +313,11 @@
     border: none;
     background: none;
     cursor: pointer;
-    color: #333;
+    color: #111827;
   }
 
   .ctx-item:hover {
-    background: #e5f1fb;
+    background: #f0f7ff;
   }
 
   .ctx-item--danger {

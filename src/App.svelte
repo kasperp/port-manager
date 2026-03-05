@@ -53,19 +53,19 @@
 
 <style>
   main {
-    padding: 20px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     height: 100%;
     box-sizing: border-box;
   }
 
   .status-bar {
-    font-size: 12px;
-    color: #888;
+    font-size: 11px;
+    color: #9ca3af;
     margin: 0;
-    padding-top: 4px;
+    padding-top: 2px;
     flex-shrink: 0;
   }
 </style>
