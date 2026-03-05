@@ -4,6 +4,16 @@ use std::fs;
 use std::io::BufRead;
 use std::path::PathBuf;
 
+/// Default: 6 connections (matches ufw LIMIT default).
+fn default_rate_limit_max() -> u32 {
+    6
+}
+
+/// Default: 30-second window (matches ufw LIMIT default).
+fn default_rate_limit_window_secs() -> u32 {
+    30
+}
+
 /// A single connection profile with its own host, user, SSH port, and forwarded ports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -12,6 +22,12 @@ pub struct Profile {
     pub user: String,
     pub ssh_port: u16,
     pub ports: Vec<u16>,
+    /// Maximum number of SSH connection attempts allowed within the rate limit window.
+    #[serde(default = "default_rate_limit_max")]
+    pub rate_limit_max: u32,
+    /// Duration of the rate limit sliding window in seconds.
+    #[serde(default = "default_rate_limit_window_secs")]
+    pub rate_limit_window_secs: u32,
 }
 
 impl Profile {
@@ -22,6 +38,8 @@ impl Profile {
             user: String::new(),
             ssh_port: 22,
             ports: Vec::new(),
+            rate_limit_max: default_rate_limit_max(),
+            rate_limit_window_secs: default_rate_limit_window_secs(),
         }
     }
 }
@@ -90,6 +108,8 @@ pub fn load_config(app_data_dir: &PathBuf) -> Config {
                 user: old.user,
                 ssh_port: old.ssh_port,
                 ports: old.ports,
+                rate_limit_max: default_rate_limit_max(),
+                rate_limit_window_secs: default_rate_limit_window_secs(),
             };
             let config = Config {
                 active_profile: "Default".to_string(),
@@ -128,6 +148,8 @@ pub fn load_config(app_data_dir: &PathBuf) -> Config {
                         user: old.user.unwrap_or_default(),
                         ssh_port: old.ssh_port.unwrap_or(22),
                         ports: old.ports.unwrap_or_default(),
+                        rate_limit_max: default_rate_limit_max(),
+                        rate_limit_window_secs: default_rate_limit_window_secs(),
                     };
                     return Config {
                         active_profile: "Default".to_string(),

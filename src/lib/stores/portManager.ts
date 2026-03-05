@@ -13,7 +13,15 @@ import type {
 export const config = writable<Config>({
   active_profile: "Default",
   profiles: [
-    { name: "Default", host: "", user: "", ssh_port: 22, ports: [] },
+    {
+      name: "Default",
+      host: "",
+      user: "",
+      ssh_port: 22,
+      ports: [],
+      rate_limit_max: 6,
+      rate_limit_window_secs: 30,
+    },
   ],
 });
 export const portStatuses = writable<PortStatusInfo[]>([]);
@@ -37,6 +45,8 @@ export const activeProfile = derived<typeof config, Profile>(
         user: "",
         ssh_port: 22,
         ports: [],
+        rate_limit_max: 6,
+        rate_limit_window_secs: 30,
       }
     );
   }
@@ -48,9 +58,9 @@ export const aggregateStatus = derived<
   AggregateStatus
 >(portStatuses, ($statuses) => {
   if ($statuses.length === 0) return "no-ports";
-  const active = $statuses.filter((s) => s.status === "Active").length;
-  if (active === $statuses.length) return "all-active";
-  if (active > 0) return "partial";
+  const forwarding = $statuses.filter((s) => s.status === "Forwarding").length;
+  if (forwarding === $statuses.length) return "all-forwarding";
+  if (forwarding > 0) return "partial";
   return "inactive";
 });
 
@@ -75,17 +85,32 @@ export async function loadSshHosts() {
   sshHosts.set(hosts);
 }
 
-export async function saveSettings(
+export async function saveProfileSettings(
   host: string,
   user: string,
-  sshPort: number
+  sshPort: number,
+  rateLimitMax: number,
+  rateLimitWindowSecs: number
 ) {
-  await invoke("save_settings", { host, user, sshPort });
+  await invoke("save_profile_settings", {
+    host,
+    user,
+    sshPort,
+    rateLimitMax,
+    rateLimitWindowSecs,
+  });
   config.update((c) => ({
     ...c,
     profiles: c.profiles.map((p) =>
       p.name === c.active_profile
-        ? { ...p, host, user, ssh_port: sshPort }
+        ? {
+            ...p,
+            host,
+            user,
+            ssh_port: sshPort,
+            rate_limit_max: rateLimitMax,
+            rate_limit_window_secs: rateLimitWindowSecs,
+          }
         : p
     ),
   }));
@@ -145,6 +170,52 @@ export async function stopAll() {
   await invoke("stop_all");
   await loadStatuses();
   statusMessage.set("Port forwards stopped");
+}
+
+export async function startPort(port: number): Promise<string | null> {
+  try {
+    isPending.set(true);
+    statusMessage.set(`Starting port ${port}...`);
+    await invoke("start_port", { port });
+    // Give SSH ~2s to establish the connection before refreshing
+    setTimeout(async () => {
+      await loadStatuses();
+      isPending.set(false);
+      statusMessage.set(`Port ${port} started`);
+    }, 2000);
+    return null;
+  } catch (e) {
+    isPending.set(false);
+    const msg = String(e);
+    statusMessage.set(`Start failed: ${msg}`);
+    return msg;
+  }
+}
+
+export async function stopPort(port: number): Promise<string | null> {
+  try {
+    await invoke("stop_port", { port });
+    await loadStatuses();
+    statusMessage.set(`Port ${port} stopped`);
+    return null;
+  } catch (e) {
+    const msg = String(e);
+    statusMessage.set(`Stop failed: ${msg}`);
+    return msg;
+  }
+}
+
+export async function killPortProcess(port: number): Promise<string | null> {
+  try {
+    await invoke("kill_port_process", { port });
+    statusMessage.set(`Killed process on port ${port}`);
+    await loadStatuses();
+    return null;
+  } catch (e) {
+    const msg = String(e);
+    statusMessage.set(`Kill failed: ${msg}`);
+    return msg;
+  }
 }
 
 export async function setAutoReconnect(enabled: boolean) {

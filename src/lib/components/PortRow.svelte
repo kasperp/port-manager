@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import type { PortStatusInfo } from "../types";
+  import { killPortProcess, startPort, stopPort } from "../stores/portManager";
 
   export let portInfo: PortStatusInfo;
   export let pending: boolean = false;
@@ -8,18 +9,111 @@
 
   const dispatch = createEventDispatcher();
 
-  $: displayStatus = pending ? "Pending" : portInfo.status;
+  let killing = false;
+
+  // Context menu state
+  let showMenu = false;
+  let menuX = 0;
+  let menuY = 0;
+
+  $: displayStatus = pending
+    ? "Pending"
+    : {
+        Forwarding: "Forwarding",
+        RemoteDown: "Remote Down",
+        Reconnecting: "Reconnecting",
+        TunnelDown: "Tunnel Down",
+        PortInUse: "Port In Use",
+        Stopped: "Stopped",
+      }[portInfo.status] ?? portInfo.status;
+
   $: dotColor = pending
     ? "#f59e0b"
-    : portInfo.status === "Active"
-      ? "#16a34a"
-      : "#dc2626";
+    : {
+        Forwarding: "#16a34a",
+        RemoteDown: "#ea580c",
+        Reconnecting: "#f59e0b",
+        TunnelDown: "#dc2626",
+        PortInUse: "#3b82f6",
+        Stopped: "#6b7280",
+      }[portInfo.status] ?? "#6b7280";
+
   $: textColor = pending
     ? "#f59e0b"
-    : portInfo.status === "Active"
-      ? "#16a34a"
-      : "#6b7280";
+    : {
+        Forwarding: "#16a34a",
+        RemoteDown: "#ea580c",
+        Reconnecting: "#f59e0b",
+        TunnelDown: "#dc2626",
+        PortInUse: "#3b82f6",
+        Stopped: "#6b7280",
+      }[portInfo.status] ?? "#6b7280";
+
+  $: statusTooltip = pending
+    ? "Waiting for SSH connection to establish"
+    : {
+        Forwarding: "Tunnel is up and remote service is accepting connections",
+        RemoteDown: "Tunnel is up but the remote service is not running",
+        Reconnecting: "Tunnel died — automatically reconnecting",
+        TunnelDown: "Tunnel died — auto-reconnect is off or in cooldown",
+        PortInUse: "Another process is already listening on this port",
+        Stopped: "Not forwarding — right-click to start",
+      }[portInfo.status] ?? "";
+
+  $: isPortInUse = portInfo.status === "PortInUse";
+  $: ownerLabel = portInfo.process_name
+    ? `${portInfo.process_name} (${portInfo.owner_pid})`
+    : portInfo.owner_pid
+      ? `PID ${portInfo.owner_pid}`
+      : null;
+
+  // Determine which context menu actions are available
+  $: canStart =
+    !pending &&
+    (portInfo.status === "Stopped" || portInfo.status === "TunnelDown");
+  $: canStop =
+    !pending &&
+    (portInfo.status === "Forwarding" || portInfo.status === "RemoteDown" || portInfo.status === "Reconnecting");
+  $: canKill = !pending && portInfo.status === "PortInUse";
+
+  async function handleKill() {
+    killing = true;
+    await killPortProcess(portInfo.port);
+    killing = false;
+  }
+
+  function handleContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    // Only show if there's a meaningful action
+    if (!canStart && !canStop && !canKill) return;
+    menuX = e.clientX;
+    menuY = e.clientY;
+    showMenu = true;
+  }
+
+  function closeMenu() {
+    showMenu = false;
+  }
+
+  async function handleMenuStart() {
+    showMenu = false;
+    await startPort(portInfo.port);
+  }
+
+  async function handleMenuStop() {
+    showMenu = false;
+    await stopPort(portInfo.port);
+  }
+
+  async function handleMenuKill() {
+    showMenu = false;
+    killing = true;
+    await killPortProcess(portInfo.port);
+    killing = false;
+  }
 </script>
+
+<svelte:window on:click={closeMenu} />
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -27,14 +121,57 @@
   class="port-row"
   class:selected
   on:click={() => dispatch("select")}
+  on:contextmenu={handleContextMenu}
 >
   <span class="port-number">{portInfo.port}</span>
-  <span class="status-cell">
+  <span class="status-cell" title={statusTooltip}>
     <span class="dot" style="background: {dotColor}"></span>
     <span style="color: {textColor}">{displayStatus}</span>
   </span>
-  <span class="pid">{portInfo.pid ?? "—"}</span>
+  {#if isPortInUse && ownerLabel}
+    <span class="owner-cell">
+      <span class="owner-name" title={ownerLabel}>{ownerLabel}</span>
+      <button
+        class="kill-btn"
+        on:click|stopPropagation={handleKill}
+        disabled={killing}
+        title="Kill this process"
+      >
+        {killing ? "..." : "Kill"}
+      </button>
+    </span>
+  {:else}
+    <span class="pid">{portInfo.pid ?? "—"}</span>
+  {/if}
 </div>
+
+{#if showMenu}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="ctx-backdrop" on:click|stopPropagation={closeMenu}>
+    <div
+      class="ctx-menu"
+      style="left: {menuX}px; top: {menuY}px"
+      on:click|stopPropagation
+    >
+      {#if canStart}
+        <button class="ctx-item" on:click={handleMenuStart}>
+          Start
+        </button>
+      {/if}
+      {#if canStop}
+        <button class="ctx-item" on:click={handleMenuStop}>
+          Stop
+        </button>
+      {/if}
+      {#if canKill}
+        <button class="ctx-item ctx-item--danger" on:click={handleMenuKill}>
+          Kill Process
+        </button>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <style>
   .port-row {
@@ -72,5 +209,87 @@
   .pid {
     color: #888;
     font-size: 12px;
+  }
+
+  .owner-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .owner-name {
+    color: #3b82f6;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kill-btn {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    font-size: 11px;
+    border: 1px solid #dc2626;
+    border-radius: 3px;
+    background: #fff;
+    color: #dc2626;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .kill-btn:hover:not(:disabled) {
+    background: #dc2626;
+    color: #fff;
+  }
+
+  .kill-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .ctx-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+  }
+
+  .ctx-menu {
+    position: fixed;
+    background: #fff;
+    border: 1px solid #d4d4d4;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px 0;
+    min-width: 120px;
+    z-index: 1001;
+  }
+
+  .ctx-item {
+    display: block;
+    width: 100%;
+    padding: 6px 14px;
+    font-size: 13px;
+    text-align: left;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: #333;
+  }
+
+  .ctx-item:hover {
+    background: #e5f1fb;
+  }
+
+  .ctx-item--danger {
+    color: #dc2626;
+  }
+
+  .ctx-item--danger:hover {
+    background: #fef2f2;
   }
 </style>

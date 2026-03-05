@@ -7,15 +7,15 @@
 
   $: statusText =
     {
-      "all-active": "All ports active",
-      partial: "Some ports active",
-      inactive: "No ports active",
+      "all-forwarding": "All ports forwarding",
+      partial: "Some ports forwarding",
+      inactive: "No ports forwarding",
       "no-ports": "No ports configured",
     }[$aggregateStatus] ?? "Ready";
 
   $: statusColor =
     {
-      "all-active": "#16a34a",
+      "all-forwarding": "#16a34a",
       partial: "#ea580c",
       inactive: "#6b7280",
       "no-ports": "#6b7280",
