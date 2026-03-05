@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -13,6 +13,9 @@ pub struct AppState {
     /// Timestamps of recent SSH connection attempts, keyed by profile name.
     /// Used for rate-limiting connection spawns to avoid triggering firewall rules.
     pub connection_attempts: HashMap<String, VecDeque<Instant>>,
+    /// Ports the user intends to be forwarded (started via Start All or Start Port).
+    /// Used to distinguish "Stopped" (not in set) from "TunnelDown/Reconnecting" (in set but tunnel died).
+    pub managed_ports: HashSet<u16>,
 }
 
 impl AppState {
@@ -23,6 +26,7 @@ impl AppState {
             auto_reconnect: true,
             tunnel_cooldowns: HashMap::new(),
             connection_attempts: HashMap::new(),
+            managed_ports: HashSet::new(),
         }
     }
 }

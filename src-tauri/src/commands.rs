@@ -2,7 +2,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::config::{save_config, scan_ssh_config, Config, Profile, SshHostEntry};
 use crate::state::SharedState;
-use crate::status::{is_port_active, PortStatus, PortStatusInfo};
+use crate::status::{get_port_owner, probe_port, resolve_status, PortStatusInfo};
 use crate::tunnel;
 
 // ---- Config Commands ----
@@ -55,6 +55,7 @@ pub fn remove_port(app: AppHandle, state: State<SharedState>, port: u16) -> Resu
     if let Some(mut proc) = s.tunnels.remove(&port) {
         let _ = proc.child.kill();
     }
+    s.managed_ports.remove(&port);
     {
         let profile = s.config.active_profile_mut();
         profile.ports.retain(|&p| p != port);
@@ -79,7 +80,10 @@ pub fn switch_profile(
     }
 
     // Stop all tunnels for the current profile
-    tunnel::stop_all(&mut s.tunnels);
+    {
+        let s = &mut *s;
+        tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
+    }
     s.tunnel_cooldowns.clear();
 
     // Switch active profile
@@ -119,7 +123,10 @@ pub fn create_profile(
     s.config.profiles.push(profile);
 
     // Stop tunnels from the current profile and switch to the new one
-    tunnel::stop_all(&mut s.tunnels);
+    {
+        let s = &mut *s;
+        tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
+    }
     s.tunnel_cooldowns.clear();
     s.config.active_profile = name;
 
@@ -144,7 +151,10 @@ pub fn delete_profile(
 
     // If deleting the active profile, stop tunnels and switch to another
     if s.config.active_profile == name {
-        tunnel::stop_all(&mut s.tunnels);
+        {
+            let s = &mut *s;
+            tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
+        }
         s.tunnel_cooldowns.clear();
     }
 
@@ -205,7 +215,10 @@ pub fn import_ssh_profile(
     s.config.profiles.push(profile);
 
     // Stop tunnels from the current profile and switch to the imported one
-    tunnel::stop_all(&mut s.tunnels);
+    {
+        let s = &mut *s;
+        tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
+    }
     s.tunnel_cooldowns.clear();
     s.config.active_profile = profile_name;
 
@@ -224,13 +237,14 @@ pub fn start_all(state: State<SharedState>) -> Vec<String> {
     let profile_name = profile.name.clone();
     let s = &mut *s;
     let attempts = s.connection_attempts.entry(profile_name).or_default();
-    tunnel::start_all(&mut s.tunnels, &profile, attempts)
+    tunnel::start_all(&mut s.tunnels, &mut s.managed_ports, &profile, attempts)
 }
 
 #[tauri::command]
 pub fn stop_all(state: State<SharedState>) {
     let mut s = state.lock().unwrap();
-    tunnel::stop_all(&mut s.tunnels);
+    let s = &mut *s;
+    tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
 }
 
 #[tauri::command]
@@ -244,23 +258,108 @@ pub fn set_auto_reconnect(state: State<SharedState>, enabled: bool) {
 pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
     let s = state.lock().unwrap();
     let profile = s.config.active_profile();
-    profile
+    let auto_reconnect = s.auto_reconnect;
+    let port_info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
         .ports
         .iter()
         .map(|&port| {
-            let active = is_port_active(port);
+            let has_tunnel = s.tunnels.contains_key(&port);
             let pid = s.tunnels.get(&port).map(|p| p.pid);
+            let is_intended = s.managed_ports.contains(&port);
+            // Will reconnect if auto-reconnect is on and port is not in cooldown
+            let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
+            let will_reconnect = auto_reconnect && !in_cooldown;
+            (port, has_tunnel, pid, is_intended, will_reconnect)
+        })
+        .collect();
+    drop(s); // Release lock before probing
+
+    port_info
+        .into_iter()
+        .map(|(port, has_tunnel, pid, is_intended, will_reconnect)| {
+            let raw_status = probe_port(port, has_tunnel);
+            let port_status = resolve_status(raw_status, is_intended, will_reconnect);
+            let (owner_pid, process_name) = if port_status == crate::status::PortStatus::PortInUse {
+                match get_port_owner(port) {
+                    Some((op, name)) => (Some(op), Some(name)),
+                    None => (None, None),
+                }
+            } else {
+                (None, None)
+            };
             PortStatusInfo {
                 port,
-                status: if active {
-                    PortStatus::Active
-                } else {
-                    PortStatus::Inactive
-                },
+                status: port_status,
                 pid,
+                owner_pid,
+                process_name,
             }
         })
         .collect()
+}
+
+#[tauri::command]
+pub fn kill_port_process(port: u16) -> Result<(), String> {
+    let (pid, _name) = crate::status::get_port_owner(port)
+        .ok_or_else(|| format!("No process found listening on port {}", port))?;
+    crate::status::kill_process(pid)
+}
+
+#[tauri::command]
+pub fn start_port(state: State<SharedState>, port: u16) -> Result<(), String> {
+    let mut s = state.lock().unwrap();
+    let profile = s.config.active_profile().clone();
+
+    if profile.host.is_empty() || profile.user.is_empty() {
+        return Err("Profile has no host/user configured".to_string());
+    }
+    if !profile.ports.contains(&port) {
+        return Err(format!("Port {} is not in the active profile", port));
+    }
+    if s.tunnels.contains_key(&port) {
+        return Err(format!("Port {} is already managed", port));
+    }
+    if crate::status::is_local_port_bound(port) {
+        return Err(format!(
+            "Port {} is already in use by another process",
+            port
+        ));
+    }
+
+    let profile_name = profile.name.clone();
+    let s = &mut *s;
+    let attempts = s.connection_attempts.entry(profile_name).or_default();
+
+    if !tunnel::can_connect(
+        attempts,
+        profile.rate_limit_max,
+        profile.rate_limit_window_secs,
+    ) {
+        return Err("Rate limit reached — try again shortly".to_string());
+    }
+    tunnel::record_attempt(attempts);
+
+    match tunnel::spawn_tunnel(port, &profile) {
+        Ok(proc) => {
+            s.tunnels.insert(port, proc);
+            s.managed_ports.insert(port);
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub fn stop_port(state: State<SharedState>, port: u16) -> Result<(), String> {
+    let mut s = state.lock().unwrap();
+    s.managed_ports.remove(&port);
+    match s.tunnels.remove(&port) {
+        Some(mut proc) => {
+            let _ = proc.child.kill();
+            Ok(())
+        }
+        None => Ok(()), // Port wasn't running, but we've unmanaged it
+    }
 }
 
 // ---- Windows Startup Registry ----

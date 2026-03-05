@@ -1,9 +1,11 @@
-export type PortStatus = "Active" | "Inactive";
+export type PortStatus = "Forwarding" | "RemoteDown" | "Reconnecting" | "TunnelDown" | "PortInUse" | "Stopped";
 
 export interface PortStatusInfo {
   port: number;
   status: PortStatus;
   pid: number | null;
+  owner_pid: number | null;
+  process_name: string | null;
 }
 
 export interface Profile {
@@ -29,7 +31,7 @@ export interface SshHostEntry {
 }
 
 export type AggregateStatus =
-  | "all-active"
+  | "all-forwarding"
   | "partial"
   | "inactive"
   | "no-ports";

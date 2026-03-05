@@ -51,7 +51,7 @@ pub fn run() {
                     .connection_attempts
                     .entry(profile_name)
                     .or_default();
-                tunnel::start_all(&mut s.tunnels, &profile, attempts);
+                tunnel::start_all(&mut s.tunnels, &mut s.managed_ports, &profile, attempts);
             }
 
             Ok(())
@@ -63,8 +63,11 @@ pub fn run() {
             commands::remove_port,
             commands::start_all,
             commands::stop_all,
+            commands::start_port,
+            commands::stop_port,
             commands::set_auto_reconnect,
             commands::get_port_statuses,
+            commands::kill_port_process,
             commands::set_startup_enabled,
             commands::get_startup_enabled,
             commands::switch_profile,
@@ -101,13 +104,15 @@ fn build_tray_menu(
     let port_items: Vec<MenuItem<tauri::Wry>> = statuses
         .iter()
         .map(|s| {
-            let active = matches!(s.status, PortStatus::Active);
-            let label = format!(
-                "{}  :{}  —  {}",
-                if active { "●" } else { "○" },
-                s.port,
-                if active { "Active" } else { "Inactive" }
-            );
+            let (dot, label_text) = match s.status {
+                PortStatus::Forwarding => ("●", "Forwarding"),
+                PortStatus::RemoteDown => ("●", "Remote Down"),
+                PortStatus::Reconnecting => ("●", "Reconnecting"),
+                PortStatus::TunnelDown => ("●", "Tunnel Down"),
+                PortStatus::PortInUse => ("●", "Port In Use"),
+                PortStatus::Stopped => ("○", "Stopped"),
+            };
+            let label = format!("{}  :{}  —  {}", dot, s.port, label_text);
             MenuItem::with_id(app, format!("ps-{}", s.port), label, false, None::<&str>)
         })
         .collect::<tauri::Result<_>>()?;
@@ -160,16 +165,18 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
                     .connection_attempts
                     .entry(profile_name)
                     .or_default();
-                tunnel::start_all(&mut s.tunnels, &profile, attempts);
+                tunnel::start_all(&mut s.tunnels, &mut s.managed_ports, &profile, attempts);
             }
             "stop" => {
                 let mut s = state_menu.lock().unwrap();
-                tunnel::stop_all(&mut s.tunnels);
+                let s = &mut *s;
+                tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
             }
             "quit" => {
                 {
                     let mut s = state_menu.lock().unwrap();
-                    tunnel::stop_all(&mut s.tunnels);
+                    let s = &mut *s;
+                    tunnel::stop_all(&mut s.tunnels, &mut s.managed_ports);
                 }
                 app.exit(0);
             }
@@ -198,7 +205,8 @@ async fn background_task(app: AppHandle, state: SharedState) {
     loop {
         tokio::time::sleep(Duration::from_secs(10)).await;
 
-        let (statuses, profile_name) = {
+        // Phase 1: Lock state, reconnect dead tunnels, collect port info, release lock
+        let (port_info, profile_name) = {
             let mut s = state.lock().unwrap();
             let auto = s.auto_reconnect;
             let profile = s.config.active_profile().clone();
@@ -213,32 +221,59 @@ async fn background_task(app: AppHandle, state: SharedState) {
                 tunnel::reconnect_dead(
                     &mut s.tunnels,
                     &mut s.tunnel_cooldowns,
+                    &s.managed_ports,
                     &profile,
                     attempts,
                 );
             }
 
-            let statuses = profile
+            // Collect port info tuples while we hold the lock
+            // (port, has_tunnel, pid, is_intended, will_reconnect)
+            let info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
                 .ports
                 .iter()
                 .map(|&port| {
-                    let active = status::is_port_active(port);
+                    let has_tunnel = s.tunnels.contains_key(&port);
                     let pid = s.tunnels.get(&port).map(|p| p.pid);
-                    status::PortStatusInfo {
-                        port,
-                        status: if active {
-                            PortStatus::Active
-                        } else {
-                            PortStatus::Inactive
-                        },
-                        pid,
-                    }
+                    let is_intended = s.managed_ports.contains(&port);
+                    let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
+                    let will_reconnect = auto && !in_cooldown;
+                    (port, has_tunnel, pid, is_intended, will_reconnect)
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
             let name = profile.name.clone();
-            (statuses, name)
+            (info, name)
         };
+        // Lock is released here
+
+        // Phase 2: Probe all ports in parallel OUTSIDE the mutex
+        let probe_handles: Vec<_> = port_info
+            .into_iter()
+            .map(|(port, has_tunnel, pid, is_intended, will_reconnect)| {
+                let handle = tokio::task::spawn_blocking(move || {
+                    let raw_status = status::probe_port(port, has_tunnel);
+                    let port_status = status::resolve_status(raw_status, is_intended, will_reconnect);
+                    let (owner_pid, process_name) = if port_status == status::PortStatus::PortInUse {
+                        match status::get_port_owner(port) {
+                            Some((op, name)) => (Some(op), Some(name)),
+                            None => (None, None),
+                        }
+                    } else {
+                        (None, None)
+                    };
+                    status::PortStatusInfo { port, status: port_status, pid, owner_pid, process_name }
+                });
+                handle
+            })
+            .collect();
+
+        let mut statuses = Vec::with_capacity(probe_handles.len());
+        for handle in probe_handles {
+            if let Ok(info) = handle.await {
+                statuses.push(info);
+            }
+        }
 
         let _ = app.emit("port-status-update", &statuses);
         update_tray_icon(&app, &statuses);
@@ -254,14 +289,14 @@ fn update_tray_icon(app: &AppHandle, statuses: &[status::PortStatusInfo]) {
     if statuses.is_empty() {
         return;
     }
-    let active = statuses
+    let forwarding = statuses
         .iter()
-        .filter(|s| matches!(s.status, PortStatus::Active))
+        .filter(|s| matches!(s.status, PortStatus::Forwarding))
         .count();
 
-    let icon_bytes: &[u8] = if active == statuses.len() {
+    let icon_bytes: &[u8] = if forwarding == statuses.len() {
         include_bytes!("../icons/tray-green.png")
-    } else if active > 0 {
+    } else if forwarding > 0 {
         include_bytes!("../icons/tray-orange.png")
     } else {
         include_bytes!("../icons/tray-red.png")

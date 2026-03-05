@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use std::os::windows::process::CommandExt;
 
 use crate::config::Profile;
-use crate::status::is_port_active;
+use crate::status::is_local_port_bound;
 
 pub struct TunnelProcess {
     pub pid: u32,
@@ -69,8 +69,10 @@ pub fn spawn_tunnel(port: u16, profile: &Profile) -> Result<TunnelProcess, Strin
 /// Start tunnels for all ports not already active, respecting the rate limit.
 /// Returns any spawn errors. Ports that could not be started due to the rate
 /// limit will be picked up by subsequent background-loop iterations.
+/// All profile ports are added to `managed_ports` to indicate intent.
 pub fn start_all(
     tunnels: &mut HashMap<u16, TunnelProcess>,
+    managed_ports: &mut HashSet<u16>,
     profile: &Profile,
     attempts: &mut VecDeque<Instant>,
 ) -> Vec<String> {
@@ -78,8 +80,12 @@ pub fn start_all(
     if profile.host.is_empty() || profile.user.is_empty() {
         return errors;
     }
+    // Mark all profile ports as intended-to-forward
     for &port in &profile.ports {
-        if !is_port_active(port) && !tunnels.contains_key(&port) {
+        managed_ports.insert(port);
+    }
+    for &port in &profile.ports {
+        if !is_local_port_bound(port) && !tunnels.contains_key(&port) {
             if !can_connect(
                 attempts,
                 profile.rate_limit_max,
@@ -100,22 +106,25 @@ pub fn start_all(
     errors
 }
 
-/// Kill all tracked SSH processes.
-pub fn stop_all(tunnels: &mut HashMap<u16, TunnelProcess>) {
+/// Kill all tracked SSH processes and clear managed intent.
+pub fn stop_all(tunnels: &mut HashMap<u16, TunnelProcess>, managed_ports: &mut HashSet<u16>) {
     for (_, proc) in tunnels.iter_mut() {
         let _ = proc.child.kill();
     }
     tunnels.clear();
+    managed_ports.clear();
 }
 
 const RECONNECT_COOLDOWN_SECS: u64 = 60;
 
-/// Remove dead tunnel entries and restart any missing ports.
+/// Remove dead tunnel entries and restart any missing managed ports.
 /// Ports that fail are put in a cooldown to avoid rapid respawn loops.
 /// Respawns also respect the per-profile rate limit.
+/// Only ports in `managed_ports` are eligible for reconnection.
 pub fn reconnect_dead(
     tunnels: &mut HashMap<u16, TunnelProcess>,
     cooldowns: &mut HashMap<u16, Instant>,
+    managed_ports: &HashSet<u16>,
     profile: &Profile,
     attempts: &mut VecDeque<Instant>,
 ) {
@@ -135,9 +144,12 @@ pub fn reconnect_dead(
         }
         still_running
     });
-    // Restart missing ports, respecting cooldown
+    // Restart missing ports that the user intended to be forwarded
     for &port in &profile.ports {
-        if is_port_active(port) || tunnels.contains_key(&port) {
+        if !managed_ports.contains(&port) {
+            continue;
+        }
+        if is_local_port_bound(port) || tunnels.contains_key(&port) {
             continue;
         }
         if let Some(&failed_at) = cooldowns.get(&port) {
