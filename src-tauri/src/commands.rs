@@ -389,8 +389,53 @@ pub fn set_startup_enabled(enabled: bool) -> Result<(), String> {
 
 #[cfg(not(windows))]
 #[tauri::command]
-pub fn set_startup_enabled(_enabled: bool) -> Result<(), String> {
-    Err("Startup registration is only supported on Windows".to_string())
+pub fn set_startup_enabled(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::fs;
+
+        fn autostart_entry_path() -> Result<std::path::PathBuf, String> {
+            let config_dir = dirs::config_dir()
+                .ok_or_else(|| "Cannot resolve Linux config directory".to_string())?;
+            Ok(config_dir.join("autostart").join("port-manager.desktop"))
+        }
+
+        fn escape_exec_arg(arg: &str) -> String {
+            arg.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace(' ', "\\ ")
+        }
+
+        let entry_path = autostart_entry_path()?;
+
+        if enabled {
+            let autostart_dir = entry_path
+                .parent()
+                .ok_or_else(|| "Invalid autostart directory".to_string())?;
+            fs::create_dir_all(autostart_dir).map_err(|e| e.to_string())?;
+
+            let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exec = escape_exec_arg(&exe_path.to_string_lossy());
+
+            let desktop_entry = format!(
+                "[Desktop Entry]\nType=Application\nVersion=1.0\nName=Port Manager\nComment=Keep SSH port forwards alive\nExec={}\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
+                exec
+            );
+            fs::write(&entry_path, desktop_entry).map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+
+        if entry_path.exists() {
+            fs::remove_file(&entry_path).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = enabled;
+        Err("Startup registration is only supported on Windows and Linux".to_string())
+    }
 }
 
 #[cfg(windows)]
@@ -411,5 +456,19 @@ pub fn get_startup_enabled() -> bool {
 #[cfg(not(windows))]
 #[tauri::command]
 pub fn get_startup_enabled() -> bool {
-    false
+    #[cfg(target_os = "linux")]
+    {
+        let Some(config_dir) = dirs::config_dir() else {
+            return false;
+        };
+        return config_dir
+            .join("autostart")
+            .join("port-manager.desktop")
+            .exists();
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
 }
