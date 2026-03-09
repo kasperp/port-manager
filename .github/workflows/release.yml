@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  release:
+  release-windows:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -39,7 +39,68 @@ jobs:
             - **PortManager_*_x64-setup.exe** — NSIS installer (recommended)
             - **PortManager_*_x64_en-US.msi** — MSI installer
             - **port-manager.exe** — Portable executable (no install needed)
+            - **PortManager_*_amd64.AppImage** — Linux AppImage (works on most distros)
+            - **PortManager_*_linux_x64.tar.gz** — Linux portable archive
 
             After first launch, tick **Run on startup** in the app to register it with Windows.
           releaseDraft: false
           prerelease: false
+
+  release-linux:
+    runs-on: ubuntu-22.04
+    needs: release-windows
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and publish Linux AppImage
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: PortManager v__VERSION__
+          releaseDraft: false
+          prerelease: false
+          args: --bundles appimage
+
+      - name: Create Linux tar.gz archive
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p dist
+          cp src-tauri/target/release/port-manager dist/port-manager
+          chmod +x dist/port-manager
+          tar -czf "dist/PortManager_${VERSION}_linux_x64.tar.gz" -C dist port-manager
+
+      - name: Upload Linux tar.gz to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          gh release upload "v${VERSION}" "dist/PortManager_${VERSION}_linux_x64.tar.gz" --clobber
