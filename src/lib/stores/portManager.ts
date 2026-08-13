@@ -179,19 +179,22 @@ export async function discoverPortlessPorts(
   }
 }
 
-export async function addPort(port: number): Promise<string | null> {
+export async function addPort(
+  port: number,
+  name: string
+): Promise<string | null> {
   try {
-    await invoke("add_port", { port });
+    await invoke("add_port", { port, name });
     config.update((c) => ({
       ...c,
       profiles: c.profiles.map((p) =>
         p.name === c.active_profile
-          ? { ...p, ports: [...p.ports, port] }
+          ? { ...p, ports: [...p.ports, { port, name }] }
           : p
       ),
     }));
     await loadStatuses();
-    statusMessage.set(`Added port ${port}`);
+    statusMessage.set(name ? `Added port ${port} (${name})` : `Added port ${port}`);
     return null;
   } catch (e) {
     return String(e);
@@ -204,7 +207,7 @@ export async function removePort(port: number) {
     ...c,
     profiles: c.profiles.map((p) =>
       p.name === c.active_profile
-        ? { ...p, ports: p.ports.filter((pp) => pp !== port) }
+        ? { ...p, ports: p.ports.filter((entry) => entry.port !== port) }
         : p
     ),
   }));

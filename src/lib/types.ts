@@ -2,10 +2,16 @@ export type PortStatus = "Forwarding" | "RemoteDown" | "Reconnecting" | "TunnelD
 
 export interface PortStatusInfo {
   port: number;
+  name: string;
   status: PortStatus;
   pid: number | null;
   owner_pid: number | null;
   process_name: string | null;
+}
+
+export interface ForwardedPort {
+  port: number;
+  name: string;
 }
 
 export type ProfileMode = "ports" | "portless";
@@ -31,7 +37,7 @@ export interface Profile {
   ssh_port: number;
   mode: ProfileMode;
   portless: PortlessConfig;
-  ports: number[];
+  ports: ForwardedPort[];
   rate_limit_max: number;
   rate_limit_window_secs: number;
 }

@@ -25,6 +25,7 @@ pub enum PortStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct PortStatusInfo {
     pub port: u16,
+    pub name: String,
     pub status: PortStatus,
     pub pid: Option<u32>,
     /// PID of the process that owns the local listening socket (for PortInUse).

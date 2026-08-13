@@ -126,6 +126,7 @@
   on:contextmenu={handleContextMenu}
 >
   <span class="port-number">{portInfo.port}</span>
+  <span class="port-name" class:unnamed={!portInfo.name} title={portInfo.name}>{portInfo.name || "—"}</span>
   <span class="status-cell" title={statusTooltip}>
     <span
       class="dot"
@@ -183,7 +184,8 @@
 <style>
   .port-row {
     display: grid;
-    grid-template-columns: 80px 130px 1fr;
+    grid-template-columns: 58px minmax(0, 1fr) 112px minmax(0, 1.2fr);
+    gap: 8px;
     padding: 9px 12px;
     border-bottom: 1px solid #f3f4f6;
     cursor: pointer;
@@ -207,6 +209,17 @@
   .port-number {
     font-weight: 500;
     color: #374151;
+  }
+
+  .port-name {
+    color: #374151;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .port-name.unnamed {
+    color: #d1d5db;
   }
 
   .status-cell {
@@ -250,7 +263,6 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
-    justify-content: flex-end;
   }
 
   .owner-name {

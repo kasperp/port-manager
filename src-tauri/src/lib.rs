@@ -112,7 +112,11 @@ fn build_tray_menu(
                 PortStatus::PortInUse => ("●", "Port In Use"),
                 PortStatus::Stopped => ("○", "Stopped"),
             };
-            let label = format!("{}  :{}  —  {}", dot, s.port, label_text);
+            let label = if s.name.is_empty() {
+                format!("{}  :{}  —  {}", dot, s.port, label_text)
+            } else {
+                format!("{}  :{} {}  —  {}", dot, s.port, s.name, label_text)
+            };
             MenuItem::with_id(app, format!("ps-{}", s.port), label, false, None::<&str>)
         })
         .collect::<tauri::Result<_>>()?;
@@ -217,7 +221,7 @@ async fn background_task(app: AppHandle, state: SharedState) {
             }
 
             if profile.mode == config::ProfileMode::Portless {
-                let info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
+                let info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
                     .portless
                     .gateways
                     .iter()
@@ -228,24 +232,27 @@ async fn background_task(app: AppHandle, state: SharedState) {
                         let is_intended = s.managed_ports.contains(&port);
                         let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
                         let will_reconnect = auto && !in_cooldown;
-                        (port, has_tunnel, pid, is_intended, will_reconnect)
+                        let name = gateway.name.clone();
+                        (port, name, has_tunnel, pid, is_intended, will_reconnect)
                     })
                     .collect();
                 let name = profile.name.clone();
                 (info, name)
             } else {
                 // Collect port info tuples while we hold the lock
-                // (port, has_tunnel, pid, is_intended, will_reconnect)
-                let info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
+                // (port, name, has_tunnel, pid, is_intended, will_reconnect)
+                let info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
                     .ports
                     .iter()
-                    .map(|&port| {
+                    .map(|entry| {
+                        let port = entry.port;
                         let has_tunnel = s.tunnels.contains_key(&port);
                         let pid = s.tunnels.get(&port).map(|p| p.pid);
                         let is_intended = s.managed_ports.contains(&port);
                         let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
                         let will_reconnect = auto && !in_cooldown;
-                        (port, has_tunnel, pid, is_intended, will_reconnect)
+                        let name = entry.name.clone();
+                        (port, name, has_tunnel, pid, is_intended, will_reconnect)
                     })
                     .collect();
 
@@ -258,7 +265,8 @@ async fn background_task(app: AppHandle, state: SharedState) {
         // Phase 2: Probe all ports in parallel OUTSIDE the mutex
         let probe_handles: Vec<_> = port_info
             .into_iter()
-            .map(|(port, has_tunnel, pid, is_intended, will_reconnect)| {
+            .map(|info| {
+                let (port, port_name, has_tunnel, pid, is_intended, will_reconnect) = info;
                 let handle = tokio::task::spawn_blocking(move || {
                     let raw_status = status::probe_port(port, has_tunnel);
                     let port_status =
@@ -274,6 +282,7 @@ async fn background_task(app: AppHandle, state: SharedState) {
                     };
                     status::PortStatusInfo {
                         port,
+                        name: port_name,
                         status: port_status,
                         pid,
                         owner_pid,

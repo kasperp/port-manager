@@ -132,10 +132,10 @@ pub fn start_all(
     }
 
     // Mark all profile ports as intended-to-forward
-    for &port in &profile.ports {
-        managed_ports.insert(port);
+    for entry in &profile.ports {
+        managed_ports.insert(entry.port);
     }
-    for &port in &profile.ports {
+    for port in profile.ports.iter().map(|entry| entry.port) {
         if !is_local_port_bound(port) && !tunnels.contains_key(&port) {
             if !can_connect(
                 attempts,
@@ -227,7 +227,7 @@ pub fn reconnect_dead(
     }
 
     // Restart missing ports that the user intended to be forwarded
-    for &port in &profile.ports {
+    for port in profile.ports.iter().map(|entry| entry.port) {
         if !managed_ports.contains(&port) {
             continue;
         }

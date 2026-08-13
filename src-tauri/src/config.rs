@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::BufRead;
@@ -65,6 +65,38 @@ fn default_portless_base_local_port() -> u16 {
     8100
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ForwardedPort {
+    pub port: u16,
+    pub name: String,
+}
+
+impl ForwardedPort {
+    pub fn new(port: u16, name: String) -> Self {
+        Self { port, name }
+    }
+}
+
+impl<'de> Deserialize<'de> for ForwardedPort {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Bare(u16),
+            Named {
+                port: u16,
+                #[serde(default)]
+                name: String,
+            },
+        }
+
+        Ok(match Raw::deserialize(deserializer)? {
+            Raw::Bare(port) => ForwardedPort::new(port, String::new()),
+            Raw::Named { port, name } => ForwardedPort::new(port, name.trim().to_string()),
+        })
+    }
+}
+
 /// A single connection profile with its own host, user, SSH port, and forwarded ports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -76,7 +108,7 @@ pub struct Profile {
     pub mode: ProfileMode,
     #[serde(default)]
     pub portless: PortlessConfig,
-    pub ports: Vec<u16>,
+    pub ports: Vec<ForwardedPort>,
     /// Maximum number of SSH connection attempts allowed within the rate limit window.
     #[serde(default = "default_rate_limit_max")]
     pub rate_limit_max: u32,
@@ -198,7 +230,7 @@ pub fn load_config(app_data_dir: &PathBuf) -> Config {
                     #[serde(rename = "SshPort")]
                     ssh_port: Option<u16>,
                     #[serde(rename = "Ports")]
-                    ports: Option<Vec<u16>>,
+                    ports: Option<Vec<ForwardedPort>>,
                 }
                 if let Ok(old) = serde_json::from_str::<OldConfig>(&contents) {
                     let profile = Profile {
@@ -229,7 +261,7 @@ struct LegacyConfig {
     host: String,
     user: String,
     ssh_port: u16,
-    ports: Vec<u16>,
+    ports: Vec<ForwardedPort>,
 }
 
 pub fn save_config(app_data_dir: &PathBuf, config: &Config) -> Result<(), String> {
@@ -346,5 +378,52 @@ fn flush_host_block(
             user: user.to_string(),
             port,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_bare_numbers_and_named_objects() {
+        let ports: Vec<ForwardedPort> =
+            serde_json::from_str(r#"[5432, {"port": 6379, "name": "redis"}, {"port": 8080}]"#)
+                .unwrap();
+        assert_eq!(
+            ports,
+            vec![
+                ForwardedPort::new(5432, String::new()),
+                ForwardedPort::new(6379, "redis".to_string()),
+                ForwardedPort::new(8080, String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn always_writes_the_object_form() {
+        let ports = vec![
+            ForwardedPort::new(5432, String::new()),
+            ForwardedPort::new(6379, "redis".to_string()),
+        ];
+        assert_eq!(
+            serde_json::to_string(&ports).unwrap(),
+            r#"[{"port":5432,"name":""},{"port":6379,"name":"redis"}]"#
+        );
+    }
+
+    #[test]
+    fn loads_a_profile_written_by_an_older_version() {
+        let profile: Profile = serde_json::from_str(
+            r#"{"name":"prod","host":"h","user":"u","ssh_port":22,"ports":[5432,6379]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            profile.ports,
+            vec![
+                ForwardedPort::new(5432, String::new()),
+                ForwardedPort::new(6379, String::new()),
+            ]
+        );
     }
 }

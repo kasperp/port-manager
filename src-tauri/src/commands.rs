@@ -3,8 +3,8 @@ use std::process::Command;
 use tauri::{AppHandle, Manager, State};
 
 use crate::config::{
-    save_config, scan_ssh_config, Config, PortlessConfig, PortlessGateway, Profile, ProfileMode,
-    SshHostEntry,
+    save_config, scan_ssh_config, Config, ForwardedPort, PortlessConfig, PortlessGateway, Profile,
+    ProfileMode, SshHostEntry,
 };
 use crate::state::SharedState;
 use crate::status::{get_port_owner, probe_port, resolve_status, PortStatusInfo};
@@ -232,14 +232,21 @@ fn parse_portless_pattern(pattern: &str) -> Result<PortlessPattern, String> {
 }
 
 #[tauri::command]
-pub fn add_port(app: AppHandle, state: State<SharedState>, port: u16) -> Result<(), String> {
+pub fn add_port(
+    app: AppHandle,
+    state: State<SharedState>,
+    port: u16,
+    name: String,
+) -> Result<(), String> {
     let mut s = state.lock().unwrap();
     {
         let profile = s.config.active_profile_mut();
-        if profile.ports.contains(&port) {
+        if profile.ports.iter().any(|entry| entry.port == port) {
             return Err(format!("Port {port} already exists"));
         }
-        profile.ports.push(port);
+        profile
+            .ports
+            .push(ForwardedPort::new(port, name.trim().to_string()));
     }
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     save_config(&data_dir, &s.config)
@@ -254,7 +261,7 @@ pub fn remove_port(app: AppHandle, state: State<SharedState>, port: u16) -> Resu
     s.managed_ports.remove(&port);
     {
         let profile = s.config.active_profile_mut();
-        profile.ports.retain(|&p| p != port);
+        profile.ports.retain(|entry| entry.port != port);
     }
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     save_config(&data_dir, &s.config)
@@ -460,7 +467,7 @@ pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
     let profile = s.config.active_profile();
     let auto_reconnect = s.auto_reconnect;
     if profile.mode == ProfileMode::Portless {
-        let port_info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
+        let port_info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
             .portless
             .gateways
             .iter()
@@ -471,14 +478,16 @@ pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
                 let is_intended = s.managed_ports.contains(&port);
                 let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
                 let will_reconnect = auto_reconnect && !in_cooldown;
-                (port, has_tunnel, pid, is_intended, will_reconnect)
+                let name = gateway.name.clone();
+                (port, name, has_tunnel, pid, is_intended, will_reconnect)
             })
             .collect();
         drop(s);
 
         return port_info
             .into_iter()
-            .map(|(port, has_tunnel, pid, is_intended, will_reconnect)| {
+            .map(|info| {
+                let (port, port_name, has_tunnel, pid, is_intended, will_reconnect) = info;
                 let raw_status = probe_port(port, has_tunnel);
                 let port_status = resolve_status(raw_status, is_intended, will_reconnect);
                 let (owner_pid, process_name) =
@@ -492,6 +501,7 @@ pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
                     };
                 PortStatusInfo {
                     port,
+                    name: port_name,
                     status: port_status,
                     pid,
                     owner_pid,
@@ -501,24 +511,27 @@ pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
             .collect();
     }
 
-    let port_info: Vec<(u16, bool, Option<u32>, bool, bool)> = profile
+    let port_info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
         .ports
         .iter()
-        .map(|&port| {
+        .map(|entry| {
+            let port = entry.port;
             let has_tunnel = s.tunnels.contains_key(&port);
             let pid = s.tunnels.get(&port).map(|p| p.pid);
             let is_intended = s.managed_ports.contains(&port);
             // Will reconnect if auto-reconnect is on and port is not in cooldown
             let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
             let will_reconnect = auto_reconnect && !in_cooldown;
-            (port, has_tunnel, pid, is_intended, will_reconnect)
+            let name = entry.name.clone();
+            (port, name, has_tunnel, pid, is_intended, will_reconnect)
         })
         .collect();
     drop(s); // Release lock before probing
 
     port_info
         .into_iter()
-        .map(|(port, has_tunnel, pid, is_intended, will_reconnect)| {
+        .map(|info| {
+            let (port, port_name, has_tunnel, pid, is_intended, will_reconnect) = info;
             let raw_status = probe_port(port, has_tunnel);
             let port_status = resolve_status(raw_status, is_intended, will_reconnect);
             let (owner_pid, process_name) = if port_status == crate::status::PortStatus::PortInUse {
@@ -531,6 +544,7 @@ pub fn get_port_statuses(state: State<SharedState>) -> Vec<PortStatusInfo> {
             };
             PortStatusInfo {
                 port,
+                name: port_name,
                 status: port_status,
                 pid,
                 owner_pid,
@@ -597,7 +611,7 @@ pub fn start_port(state: State<SharedState>, port: u16) -> Result<(), String> {
     if profile.host.is_empty() || profile.user.is_empty() {
         return Err("Profile has no host/user configured".to_string());
     }
-    if !profile.ports.contains(&port) {
+    if !profile.ports.iter().any(|entry| entry.port == port) {
         return Err(format!("Port {} is not in the active profile", port));
     }
     if s.tunnels.contains_key(&port) {

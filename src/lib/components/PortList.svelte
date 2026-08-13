@@ -9,6 +9,7 @@
   import PortRow from "./PortRow.svelte";
 
   let newPort = "";
+  let newName = "";
   let selectedPort: number | null = null;
 
   async function handleAdd() {
@@ -17,11 +18,12 @@
       statusMessage.set("Enter a valid port number (1–65535)");
       return;
     }
-    const err = await addPort(port);
+    const err = await addPort(port, newName.trim());
     if (err) {
       statusMessage.set(err);
     } else {
       newPort = "";
+      newName = "";
     }
   }
 
@@ -45,6 +47,7 @@
     <div class="port-table">
       <div class="table-header">
         <span>Port</span>
+        <span>Name</span>
         <span>Status</span>
         <span>PID</span>
       </div>
@@ -64,11 +67,19 @@
   </div>
   <div class="add-row">
     <input
+      class="port-input"
       bind:value={newPort}
       placeholder="Port number"
       type="text"
       inputmode="numeric"
       pattern="[0-9]*"
+      on:keydown={handleKeydown}
+    />
+    <input
+      class="name-input"
+      bind:value={newName}
+      placeholder="Name (optional)"
+      type="text"
       on:keydown={handleKeydown}
     />
     <button on:click={handleAdd} class="add-btn">+ Add</button>
@@ -118,7 +129,8 @@
 
   .table-header {
     display: grid;
-    grid-template-columns: 80px 130px 1fr;
+    grid-template-columns: 58px minmax(0, 1fr) 112px minmax(0, 1.2fr);
+    gap: 8px;
     padding: 7px 12px;
     background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
@@ -180,11 +192,19 @@
   }
 
   .add-row input {
-    flex: 1;
+    min-width: 0;
     padding: 7px 10px;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
     transition: border-color 0.15s;
+  }
+
+  .add-row .port-input {
+    flex: 0 0 110px;
+  }
+
+  .add-row .name-input {
+    flex: 1;
   }
 
   .add-row input:focus {

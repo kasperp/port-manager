@@ -82,14 +82,17 @@ The config file stores all profiles and tracks which one is active:
       "host": "prod.example.com",
       "user": "deploy",
       "ssh_port": 22,
-      "ports": [5432, 6379]
+      "ports": [
+        { "port": 5432, "name": "" },
+        { "port": 6379, "name": "redis" }
+      ]
     },
     {
       "name": "staging",
       "host": "staging.example.com",
       "user": "deploy",
       "ssh_port": 22,
-      "ports": [5432]
+      "ports": [{ "port": 5432, "name": "" }]
     }
   ]
 }
@@ -100,6 +103,8 @@ SSH keys are handled by your existing SSH agent / `~/.ssh/config` — Port Manag
 ### Migration from older versions
 
 If you're upgrading from an older version that used a flat config (single host/user/ports), your settings are automatically migrated into a profile named "Default" on first launch. No action needed.
+
+Ports written as bare numbers by older versions are also still read, and saved back as `{"port": …, "name": ""}`.
 
 ## Building from source
 
