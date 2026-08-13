@@ -2351,7 +2351,7 @@ dependencies = [
 
 [[package]]
 name = "port-manager"
-version = "1.3.0"
+version = "1.3.2"
 dependencies = [
  "dirs 5.0.1",
  "serde",
