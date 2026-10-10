@@ -6,6 +6,9 @@
     "lib": ["ESNext", "DOM"],
     "moduleResolution": "bundler",
     "strict": true,
+    "baseUrl": ".",
+    "paths": { "$lib": ["./src/lib"], "$lib/*": ["./src/lib/*"] },
+    "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
   "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.svelte"]

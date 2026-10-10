@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use crate::config::{PortlessGateway, Profile, ProfileMode};
+use crate::config::Profile;
 use crate::status::is_local_port_bound;
 
 pub struct TunnelProcess {
@@ -36,15 +36,6 @@ pub fn record_attempt(attempts: &mut VecDeque<Instant>) {
 
 /// Spawn an SSH tunnel for a single port.
 pub fn spawn_tunnel(port: u16, profile: &Profile) -> Result<TunnelProcess, String> {
-    spawn_forward(port, port, profile)
-}
-
-/// Spawn an SSH tunnel from one local port to one remote port.
-pub fn spawn_forward(
-    local_port: u16,
-    remote_port: u16,
-    profile: &Profile,
-) -> Result<TunnelProcess, String> {
     let mut cmd = Command::new("ssh");
     cmd.args([
         "-N",
@@ -59,7 +50,7 @@ pub fn spawn_forward(
         "-o",
         "StrictHostKeyChecking=accept-new",
         "-L",
-        &format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
+        &format!("127.0.0.1:{port}:127.0.0.1:{port}"),
         &format!("{}@{}", profile.user, profile.host),
     ])
     .stdin(Stdio::null())
@@ -73,14 +64,6 @@ pub fn spawn_forward(
 
     let pid = child.id();
     Ok(TunnelProcess { pid, child })
-}
-
-/// Spawn one Portless gateway tunnel.
-pub fn spawn_portless_gateway(
-    gateway: &PortlessGateway,
-    profile: &Profile,
-) -> Result<TunnelProcess, String> {
-    spawn_forward(gateway.local_port, gateway.remote_port, profile)
 }
 
 /// Start tunnels for all ports not already active, respecting the rate limit.
@@ -97,40 +80,6 @@ pub fn start_all(
     if profile.host.is_empty() || profile.user.is_empty() {
         return errors;
     }
-    if profile.mode == ProfileMode::Portless {
-        for gateway in &profile.portless.gateways {
-            let local_port = gateway.local_port;
-            managed_ports.insert(local_port);
-
-            if is_local_port_bound(local_port) && !tunnels.contains_key(&local_port) {
-                errors.push(format!(
-                    "{}: port {local_port} is already in use by another process",
-                    gateway.name
-                ));
-                continue;
-            }
-            if tunnels.contains_key(&local_port) {
-                continue;
-            }
-            if !can_connect(
-                attempts,
-                profile.rate_limit_max,
-                profile.rate_limit_window_secs,
-            ) {
-                break;
-            }
-
-            record_attempt(attempts);
-            match spawn_portless_gateway(gateway, profile) {
-                Ok(proc) => {
-                    tunnels.insert(local_port, proc);
-                }
-                Err(e) => errors.push(format!("{}: {e}", gateway.name)),
-            }
-        }
-        return errors;
-    }
-
     // Mark all profile ports as intended-to-forward
     for entry in &profile.ports {
         managed_ports.insert(entry.port);
@@ -195,36 +144,6 @@ pub fn reconnect_dead(
         }
         still_running
     });
-
-    if profile.mode == ProfileMode::Portless {
-        for gateway in &profile.portless.gateways {
-            let local_port = gateway.local_port;
-            if !managed_ports.contains(&local_port) {
-                continue;
-            }
-            if is_local_port_bound(local_port) || tunnels.contains_key(&local_port) {
-                continue;
-            }
-            if let Some(&failed_at) = cooldowns.get(&local_port) {
-                if now.duration_since(failed_at).as_secs() < RECONNECT_COOLDOWN_SECS {
-                    continue;
-                }
-            }
-            if !can_connect(
-                attempts,
-                profile.rate_limit_max,
-                profile.rate_limit_window_secs,
-            ) {
-                break;
-            }
-            record_attempt(attempts);
-            if let Ok(proc) = spawn_portless_gateway(gateway, profile) {
-                cooldowns.remove(&local_port);
-                tunnels.insert(local_port, proc);
-            }
-        }
-        return;
-    }
 
     // Restart missing ports that the user intended to be forwarded
     for port in profile.ports.iter().map(|entry| entry.port) {

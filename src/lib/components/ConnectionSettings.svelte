@@ -1,11 +1,14 @@
 <script lang="ts">
   import {
     activeProfile,
-    saveProfileMode,
     saveProfileSettings,
     statusMessage,
   } from "../stores/portManager";
-  import type { ProfileMode } from "../types";
+
+  import { Button } from "$lib/components/ui/button";
+  import * as Card from "$lib/components/ui/card";
+  import * as Field from "$lib/components/ui/field";
+  import { Input } from "$lib/components/ui/input";
 
   let host = "";
   let user = "";
@@ -58,220 +61,45 @@
     await saveProfileSettings(host.trim(), user.trim(), port, max, window);
   }
 
-  async function handleModeChange(mode: ProfileMode) {
-    if (mode !== $activeProfile.mode) {
-      await saveProfileMode(mode);
-    }
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") handleSave();
   }
 </script>
 
-<div class="settings-card">
-  <div class="field-group">
-    <div class="field">
-      <label for="host-input">Host</label>
-      <input
-        id="host-input"
-        bind:value={host}
-        placeholder="example.com"
-        autofocus
-        on:keydown={handleKeydown}
-      />
-    </div>
-    <div class="field field-narrow">
-      <label for="ssh-port-input">SSH Port</label>
-      <input
-        id="ssh-port-input"
-        bind:value={sshPort}
-        type="number"
-        min="1"
-        max="65535"
-        on:keydown={handleKeydown}
-      />
-    </div>
-    <div class="field">
-      <label for="user-input">User</label>
-      <input
-        id="user-input"
-        bind:value={user}
-        placeholder="username"
-        on:keydown={handleKeydown}
-      />
-    </div>
-  </div>
-
-  <div class="bottom-row">
-    <div class="mode-toggle" aria-label="Profile mode">
-      <button
-        class:active={$activeProfile.mode === "ports"}
-        on:click={() => handleModeChange("ports")}
-      >
-        Ports
-      </button>
-      <button
-        class:active={$activeProfile.mode === "portless"}
-        on:click={() => handleModeChange("portless")}
-      >
-        Portless
-      </button>
-    </div>
-    <div class="rate-limit-row">
-      <span class="rate-limit-label">Rate limit</span>
-      <div class="rate-limit-fields">
-        <input
-          id="rate-limit-max"
-          bind:value={rateLimitMax}
-          type="number"
-          min="1"
-          class="rate-limit-input"
-          on:keydown={handleKeydown}
-        />
-        <span class="rate-limit-text">conn /</span>
-        <input
-          id="rate-limit-window"
-          bind:value={rateLimitWindowSecs}
-          type="number"
-          min="1"
-          class="rate-limit-input"
-          on:keydown={handleKeydown}
-        />
-        <span class="rate-limit-text">sec</span>
-      </div>
-    </div>
-    <button on:click={handleSave}>Save</button>
-  </div>
-</div>
-
-<style>
-  .settings-card {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 14px;
-    background: white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-
-  .field-group {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-  }
-
-  .field-narrow {
-    flex: 0 0 90px;
-  }
-
-  label {
-    font-size: 11px;
-    color: #6b7280;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  input {
-    padding: 7px 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    background: white;
-    transition: border-color 0.15s;
-  }
-
-  input:focus {
-    outline: none;
-    border-color: #0078d4;
-    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
-  }
-
-  button {
-    padding: 7px 16px;
-    background: #0078d4;
-    color: white;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: background 0.15s;
-  }
-
-  button:hover {
-    background: #106ebe;
-  }
-
-  .mode-toggle {
-    display: flex;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .mode-toggle button {
-    border: 0;
-    border-radius: 0;
-    background: white;
-    color: #374151;
-    padding: 6px 10px;
-  }
-
-  .mode-toggle button:hover,
-  .mode-toggle button.active {
-    background: #0078d4;
-    color: white;
-  }
-
-  .bottom-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid #f3f4f6;
-  }
-
-  .rate-limit-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-  }
-
-  .rate-limit-label {
-    font-size: 11px;
-    color: #6b7280;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    flex-shrink: 0;
-  }
-
-  .rate-limit-fields {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .rate-limit-input {
-    width: 60px;
-    padding: 5px 8px;
-    text-align: center;
-  }
-
-  .rate-limit-text {
-    font-size: 12px;
-    color: #6b7280;
-    white-space: nowrap;
-  }
-</style>
+<Card.Root size="sm" class="gap-3 py-3">
+  <Card.Header class="px-3">
+    <Card.Title class="text-sm">Connection</Card.Title>
+  </Card.Header>
+  <Card.Content class="px-3">
+    <Field.Group class="grid grid-cols-[minmax(0,1fr)_80px_minmax(0,1fr)] gap-2">
+      <Field.Field class="gap-1.5">
+        <Field.Label for="host-input">Host</Field.Label>
+        <Input id="host-input" bind:value={host} placeholder="example.com" onkeydown={handleKeydown} />
+      </Field.Field>
+      <Field.Field class="gap-1.5">
+        <Field.Label for="ssh-port-input">SSH port</Field.Label>
+        <Input id="ssh-port-input" bind:value={sshPort} type="number" min="1" max="65535" onkeydown={handleKeydown} />
+      </Field.Field>
+      <Field.Field class="gap-1.5">
+        <Field.Label for="user-input">User</Field.Label>
+        <Input id="user-input" bind:value={user} placeholder="username" onkeydown={handleKeydown} />
+      </Field.Field>
+    </Field.Group>
+  </Card.Content>
+  <Card.Footer class="justify-between gap-3 px-3">
+    <Field.Group class="flex-row items-center gap-2">
+      <span class="shrink-0 text-xs text-muted-foreground">Rate limit</span>
+      <Field.Field class="w-14 shrink-0 gap-0">
+        <Field.Label for="rate-limit-max" class="sr-only">Maximum connections</Field.Label>
+        <Input id="rate-limit-max" bind:value={rateLimitMax} type="number" min="1" onkeydown={handleKeydown} />
+      </Field.Field>
+      <span class="shrink-0 text-xs text-muted-foreground">conn /</span>
+      <Field.Field class="w-14 shrink-0 gap-0">
+        <Field.Label for="rate-limit-window" class="sr-only">Rate limit window in seconds</Field.Label>
+        <Input id="rate-limit-window" bind:value={rateLimitWindowSecs} type="number" min="1" onkeydown={handleKeydown} />
+      </Field.Field>
+      <span class="text-xs text-muted-foreground">sec</span>
+    </Field.Group>
+    <Button size="sm" onclick={handleSave}>Save</Button>
+  </Card.Footer>
+</Card.Root>

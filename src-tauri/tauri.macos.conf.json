@@ -1,0 +1,14 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Port Manager",
+        "width": 600,
+        "height": 560,
+        "resizable": false,
+        "visible": false
+      }
+    ]
+  }
+}

@@ -13,9 +13,13 @@ A cross-platform tray app for keeping SSH port forwards alive.
 
 Download the installer from the [latest release](../../releases/latest) and run it.
 
-On first launch, fill in your server details (host, SSH port, username) and add the ports you want forwarded. Hit **Start All** and check the tray icon — green means all ports are active.
+On first launch, fill in and save your host, SSH port, and username. Use **Add & Start** to add each port and start forwarding it immediately. Check the tray icon. Green means all ports are active.
 
-Tick **Run on startup** once everything's working the way you want.
+Use the **Manage ports** menu beside **Add port** to remove all ports or remove disconnected ports from the active profile. Both actions stop their tunnels and ask for confirmation. Other profiles keep their ports. Use the trash button on a row to remove that port immediately.
+
+Open **App settings** using the gear icon and enable **Run on startup** once everything's working the way you want.
+
+On macOS, click the menu-bar icon to open the controls in a popover. Click the icon again or click outside to close it. Port Manager runs in the menu bar without a Dock icon. Right-click the icon for the status menu and Quit.
 
 ## Profiles
 
@@ -32,7 +36,7 @@ The active profile determines which SSH tunnels are managed. Only one profile is
 
 ### Switching profiles
 
-Use the **Profile** dropdown at the top of the app to switch between profiles. When you switch:
+Expand **Server settings** to access the connection settings and the **Profile** dropdown. Use the dropdown to switch between profiles. When you switch:
 1. All tunnels for the current profile are stopped
 2. The new profile becomes active
 3. You can then start tunnels for the new profile with **Start All**
@@ -55,7 +59,7 @@ Only hosts that haven't already been imported are shown in the list. The SSH but
 
 ### Deleting a profile
 
-Select the profile you want to remove in the dropdown, then click the **x** button. You'll be asked to confirm. If you delete the active profile, Port Manager stops its tunnels and switches to the first remaining profile.
+Select the profile you want to remove in the dropdown, then click the trash button. You'll be asked to confirm. If you delete the active profile, Port Manager stops its tunnels and switches to the first remaining profile.
 
 You cannot delete the last profile — there must always be at least one.
 
@@ -108,7 +112,7 @@ Ports written as bare numbers by older versions are also still read, and saved b
 
 ## Building from source
 
-You'll need [Rust](https://rustup.rs/) and Node.js 18+.
+You'll need [Rust](https://rustup.rs/) and Node.js 20.19+.
 
 ```sh
 npm install

@@ -1,5 +1,7 @@
 mod commands;
 mod config;
+#[cfg(target_os = "macos")]
+mod macos;
 mod state;
 mod status;
 mod tunnel;
@@ -29,6 +31,12 @@ pub fn run() {
 
             setup_tray(app.handle(), shared.clone())?;
 
+            #[cfg(target_os = "macos")]
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                macos::setup(app.handle())?;
+            }
+
             // Start background auto-reconnect + status emission task
             let app_handle = app.handle().clone();
             let state_bg = shared.clone();
@@ -37,6 +45,7 @@ pub fn run() {
             });
 
             // Ensure the window grabs focus so WebView2 accepts keyboard input
+            #[cfg(not(target_os = "macos"))]
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_focus();
             }
@@ -56,11 +65,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::save_profile_settings,
-            commands::save_profile_mode,
-            commands::save_portless_settings,
-            commands::discover_portless_ports,
             commands::add_port,
             commands::remove_port,
+            commands::remove_all_ports,
+            commands::remove_ports,
             commands::start_all,
             commands::stop_all,
             commands::start_port,
@@ -150,6 +158,9 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "show" => {
+                #[cfg(target_os = "macos")]
+                let _ = macos::show(app, false);
+                #[cfg(not(target_os = "macos"))]
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();
@@ -179,6 +190,17 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
+            #[cfg(target_os = "macos")]
+            if matches!(
+                &event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Right,
+                    button_state: MouseButtonState::Down,
+                    ..
+                }
+            ) {
+                let _ = macos::show_tray_menu(tray.app_handle());
+            }
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
@@ -186,6 +208,9 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
             } = event
             {
                 let app = tray.app_handle();
+                #[cfg(target_os = "macos")]
+                let _ = macos::show(app, true);
+                #[cfg(not(target_os = "macos"))]
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();
@@ -193,6 +218,11 @@ fn setup_tray(app: &AppHandle, state: SharedState) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+
+    #[cfg(target_os = "macos")]
+    if let Some(tray) = app.tray_by_id("main") {
+        macos::detach_tray_menu(&tray)?;
+    }
 
     Ok(())
 }
@@ -220,45 +250,25 @@ async fn background_task(app: AppHandle, state: SharedState) {
                 );
             }
 
-            if profile.mode == config::ProfileMode::Portless {
-                let info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
-                    .portless
-                    .gateways
-                    .iter()
-                    .map(|gateway| {
-                        let port = gateway.local_port;
-                        let has_tunnel = s.tunnels.contains_key(&port);
-                        let pid = s.tunnels.get(&port).map(|p| p.pid);
-                        let is_intended = s.managed_ports.contains(&port);
-                        let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
-                        let will_reconnect = auto && !in_cooldown;
-                        let name = gateway.name.clone();
-                        (port, name, has_tunnel, pid, is_intended, will_reconnect)
-                    })
-                    .collect();
-                let name = profile.name.clone();
-                (info, name)
-            } else {
-                // Collect port info tuples while we hold the lock
-                // (port, name, has_tunnel, pid, is_intended, will_reconnect)
-                let info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
-                    .ports
-                    .iter()
-                    .map(|entry| {
-                        let port = entry.port;
-                        let has_tunnel = s.tunnels.contains_key(&port);
-                        let pid = s.tunnels.get(&port).map(|p| p.pid);
-                        let is_intended = s.managed_ports.contains(&port);
-                        let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
-                        let will_reconnect = auto && !in_cooldown;
-                        let name = entry.name.clone();
-                        (port, name, has_tunnel, pid, is_intended, will_reconnect)
-                    })
-                    .collect();
+            // Collect port info tuples while we hold the lock
+            // (port, name, has_tunnel, pid, is_intended, will_reconnect)
+            let info: Vec<(u16, String, bool, Option<u32>, bool, bool)> = profile
+                .ports
+                .iter()
+                .map(|entry| {
+                    let port = entry.port;
+                    let has_tunnel = s.tunnels.contains_key(&port);
+                    let pid = s.tunnels.get(&port).map(|p| p.pid);
+                    let is_intended = s.managed_ports.contains(&port);
+                    let in_cooldown = s.tunnel_cooldowns.contains_key(&port);
+                    let will_reconnect = auto && !in_cooldown;
+                    let name = entry.name.clone();
+                    (port, name, has_tunnel, pid, is_intended, will_reconnect)
+                })
+                .collect();
 
-                let name = profile.name.clone();
-                (info, name)
-            }
+            let name = profile.name.clone();
+            (info, name)
         };
         // Lock is released here
 
@@ -305,6 +315,8 @@ async fn background_task(app: AppHandle, state: SharedState) {
         if let Ok(menu) = build_tray_menu(&app, &statuses, &profile_name) {
             if let Some(tray) = app.tray_by_id("main") {
                 let _ = tray.set_menu(Some(menu));
+                #[cfg(target_os = "macos")]
+                let _ = macos::detach_tray_menu(&tray);
             }
         }
     }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import {
     config,
     sshHosts,
@@ -9,9 +10,18 @@
     statusMessage,
   } from "../stores/portManager";
 
+  import PlusIcon from "@lucide/svelte/icons/plus";
+  import Trash2Icon from "@lucide/svelte/icons/trash-2";
+  import { Button } from "$lib/components/ui/button";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Field from "$lib/components/ui/field";
+  import { Input } from "$lib/components/ui/input";
+  import * as NativeSelect from "$lib/components/ui/native-select";
+
   let showNewForm = false;
   let showImportMenu = false;
   let newName = "";
+  let newNameInput: HTMLInputElement | null = null;
   let confirmDelete = false;
 
   $: profiles = $config.profiles;
@@ -21,9 +31,17 @@
     (h) => !profiles.some((p) => p.name === h.name)
   );
 
-  async function handleSwitch(e: Event) {
-    const target = e.target as HTMLSelectElement;
-    const name = target.value;
+  async function toggleNewForm() {
+    showNewForm = !showNewForm;
+    showImportMenu = false;
+    confirmDelete = false;
+    if (showNewForm) {
+      await tick();
+      newNameInput?.focus();
+    }
+  }
+
+  async function handleSwitch(name: string) {
     if (name !== activeProfileName) {
       await switchProfile(name);
     }
@@ -77,278 +95,77 @@
   }
 </script>
 
-<div class="profile-bar">
-  <div class="profile-select-row">
-    <label for="profile-select">Profile</label>
-    <select
+<div class="flex flex-col gap-2">
+  <div class="flex items-center gap-2">
+    <Field.Label for="profile-select" class="shrink-0">Profile</Field.Label>
+    <NativeSelect.Root
       id="profile-select"
+      class="min-w-0 flex-1"
       value={activeProfileName}
-      on:change={handleSwitch}
+      onchange={(event) => handleSwitch(event.currentTarget.value)}
     >
       {#each profiles as profile (profile.name)}
-        <option value={profile.name}>{profile.name}</option>
+        <NativeSelect.Option value={profile.name}>{profile.name}</NativeSelect.Option>
       {/each}
-    </select>
-
-    <button
-      class="icon-btn"
+    </NativeSelect.Root>
+    <Button
+      variant="outline"
+      size="icon-sm"
       title="New profile"
-      on:click={() => {
-        showNewForm = !showNewForm;
-        showImportMenu = false;
-        confirmDelete = false;
-      }}
+      aria-label="New profile"
+      onclick={toggleNewForm}
     >
-      +
-    </button>
-
+      <PlusIcon />
+    </Button>
     {#if availableSshHosts.length > 0}
-      <button
-        class="icon-btn import-btn"
-        title="Import from SSH config"
-        on:click={() => {
-          showImportMenu = !showImportMenu;
-          showNewForm = false;
-          confirmDelete = false;
+      <DropdownMenu.Root
+        bind:open={showImportMenu}
+        onOpenChange={(open) => {
+          if (open) {
+            showNewForm = false;
+            confirmDelete = false;
+          }
         }}
       >
-        SSH
-      </button>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button {...props} variant="outline" size="sm" title="Import from SSH config">SSH</Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="max-h-64 min-w-64">
+          <DropdownMenu.Group>
+            <DropdownMenu.GroupHeading>Import from ~/.ssh/config</DropdownMenu.GroupHeading>
+            {#each availableSshHosts as host (host.name)}
+              <DropdownMenu.Item onclick={() => handleImport(host.name)} class="flex-col items-start gap-0.5">
+                <span>{host.name}</span>
+                <span class="text-xs text-muted-foreground">
+                  {host.user ? host.user + "@" : ""}{host.hostname}{host.port !== 22 ? ":" + host.port : ""}
+                </span>
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Group>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     {/if}
-
     {#if canDelete}
       {#if confirmDelete}
-        <button class="icon-btn delete-confirm" on:click={handleDelete}>
-          Delete?
-        </button>
-        <button class="icon-btn" on:click={cancelDelete}>Cancel</button>
+        <Button variant="destructive" size="sm" onclick={handleDelete}>Delete?</Button>
+        <Button variant="outline" size="sm" onclick={cancelDelete}>Cancel</Button>
       {:else}
-        <button
-          class="icon-btn delete-btn"
-          title="Delete current profile"
-          on:click={handleDelete}
-        >
-          &times;
-        </button>
+        <Button variant="outline" size="icon-sm" title="Delete current profile" aria-label="Delete current profile" onclick={handleDelete}>
+          <Trash2Icon />
+        </Button>
       {/if}
     {/if}
   </div>
-
   {#if showNewForm}
-    <div class="new-profile-form">
-      <input
-        bind:value={newName}
-        placeholder="Profile name"
-        on:keydown={handleNewKeydown}
-        autofocus
-      />
-      <button on:click={handleCreate}>Create</button>
-      <button
-        class="cancel-btn"
-        on:click={() => {
-          showNewForm = false;
-          newName = "";
-        }}>Cancel</button
-      >
-    </div>
-  {/if}
-
-  {#if showImportMenu}
-    <div class="import-list">
-      <p class="import-header">Import from ~/.ssh/config</p>
-      {#each availableSshHosts as host (host.name)}
-        <button
-          class="import-item"
-          on:click={() => handleImport(host.name)}
-        >
-          <span class="host-name">{host.name}</span>
-          <span class="host-detail">
-            {host.user ? host.user + "@" : ""}{host.hostname}{host.port !== 22
-              ? ":" + host.port
-              : ""}
-          </span>
-        </button>
-      {/each}
-    </div>
+    <Field.Group class="flex-row items-end gap-2">
+      <Field.Field class="min-w-0 flex-1 gap-1.5">
+        <Field.Label for="new-profile-name" class="sr-only">Profile name</Field.Label>
+        <Input id="new-profile-name" bind:ref={newNameInput} bind:value={newName} placeholder="Profile name" onkeydown={handleNewKeydown} />
+      </Field.Field>
+      <Button size="sm" onclick={handleCreate}>Create</Button>
+      <Button variant="outline" size="sm" onclick={() => { showNewForm = false; newName = ""; }}>Cancel</Button>
+    </Field.Group>
   {/if}
 </div>
-
-<style>
-  .profile-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .profile-select-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  label {
-    font-size: 11px;
-    color: #6b7280;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    flex-shrink: 0;
-  }
-
-  select {
-    flex: 1;
-    padding: 6px 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 13px;
-    background: white;
-    color: #111827;
-    cursor: pointer;
-    transition: border-color 0.15s;
-  }
-
-  select:focus {
-    outline: none;
-    border-color: #0078d4;
-    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
-  }
-
-  .icon-btn {
-    padding: 5px 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    background: white;
-    color: #374151;
-    cursor: pointer;
-    font-size: 13px;
-    white-space: nowrap;
-    transition: background 0.15s, border-color 0.15s;
-  }
-
-  .icon-btn:hover {
-    background: #f9fafb;
-    border-color: #d1d5db;
-  }
-
-  .import-btn {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: #6b7280;
-  }
-
-  .delete-btn {
-    color: #dc2626;
-    font-size: 16px;
-    line-height: 1;
-    padding: 3px 8px;
-    border-color: #fecaca;
-  }
-
-  .delete-btn:hover {
-    background: #fef2f2;
-    border-color: #fca5a5;
-  }
-
-  .delete-confirm {
-    color: #dc2626;
-    background: #fef2f2;
-    border-color: #fca5a5;
-    font-size: 12px;
-  }
-
-  .delete-confirm:hover {
-    background: #fee2e2;
-  }
-
-  .new-profile-form {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .new-profile-form input {
-    flex: 1;
-    padding: 7px 10px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 13px;
-    transition: border-color 0.15s;
-  }
-
-  .new-profile-form input:focus {
-    outline: none;
-    border-color: #0078d4;
-    box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
-  }
-
-  .new-profile-form button {
-    padding: 7px 14px;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: #0078d4;
-    color: white;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 0.15s;
-  }
-
-  .new-profile-form button:hover {
-    background: #106ebe;
-  }
-
-  .cancel-btn {
-    background: white !important;
-    color: #374151 !important;
-    border-color: #e5e7eb !important;
-  }
-
-  .cancel-btn:hover {
-    background: #f9fafb !important;
-  }
-
-  .import-list {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: white;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    overflow: hidden;
-  }
-
-  .import-header {
-    font-size: 11px;
-    color: #6b7280;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 8px 12px 4px;
-  }
-
-  .import-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding: 8px 12px;
-    border: none;
-    border-top: 1px solid #f3f4f6;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.1s;
-  }
-
-  .import-item:hover {
-    background: #f0f7ff;
-  }
-
-  .host-name {
-    font-weight: 500;
-    color: #111827;
-  }
-
-  .host-detail {
-    color: #9ca3af;
-    font-size: 12px;
-  }
-</style>

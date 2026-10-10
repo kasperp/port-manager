@@ -1,14 +1,11 @@
-import { derived, writable } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AggregateStatus,
   Config,
-  PortlessDiscoveryResult,
-  PortlessGateway,
   PortStatusInfo,
   Profile,
-  ProfileMode,
   SshHostEntry,
 } from "../types";
 
@@ -21,13 +18,6 @@ export const config = writable<Config>({
       host: "",
       user: "",
       ssh_port: 22,
-      mode: "ports",
-      portless: {
-        base_local_port: 8100,
-        scheme: "https",
-        hosts: [],
-        gateways: [],
-      },
       ports: [],
       rate_limit_max: 6,
       rate_limit_window_secs: 30,
@@ -39,7 +29,17 @@ export const autoReconnect = writable(true);
 export const startupEnabled = writable(false);
 export const statusMessage = writable("Ready");
 export const isPending = writable(false);
+export const pendingPorts = writable<Set<number>>(new Set());
 export const sshHosts = writable<SshHostEntry[]>([]);
+
+let pendingProfile = get(config).active_profile;
+let profileVersion = 0;
+config.subscribe((value) => {
+  if (value.active_profile === pendingProfile) return;
+  pendingProfile = value.active_profile;
+  profileVersion += 1;
+  pendingPorts.set(new Set());
+});
 
 // Derived: the currently active profile
 export const activeProfile = derived<typeof config, Profile>(
@@ -54,13 +54,6 @@ export const activeProfile = derived<typeof config, Profile>(
         host: "",
         user: "",
         ssh_port: 22,
-        mode: "ports",
-        portless: {
-          base_local_port: 8100,
-          scheme: "https",
-          hosts: [],
-          gateways: [],
-        },
         ports: [],
         rate_limit_max: 6,
         rate_limit_window_secs: 30,
@@ -88,8 +81,9 @@ export async function loadConfig() {
 }
 
 export async function loadStatuses() {
+  const profileName = get(config).active_profile;
   const statuses = await invoke<PortStatusInfo[]>("get_port_statuses");
-  portStatuses.set(statuses);
+  if (get(config).active_profile === profileName) portStatuses.set(statuses);
 }
 
 export async function loadStartupStatus() {
@@ -134,67 +128,29 @@ export async function saveProfileSettings(
   statusMessage.set("Settings saved!");
 }
 
-export async function saveProfileMode(mode: ProfileMode) {
-  const cfg = await invoke<Config>("save_profile_mode", { mode });
-  config.set(cfg);
-  portStatuses.set([]);
-  statusMessage.set(mode === "portless" ? "Portless mode enabled" : "Ports mode enabled");
-}
-
-export async function savePortlessSettings(
-  baseLocalPort: number,
-  scheme: "http" | "https",
-  hosts: string[],
-  gateways: PortlessGateway[]
-): Promise<string | null> {
-  try {
-    const cfg = await invoke<Config>("save_portless_settings", {
-      baseLocalPort,
-      scheme,
-      hosts,
-      gateways,
-    });
-    config.set(cfg);
-    await loadStatuses();
-    statusMessage.set("Portless gateways saved");
-    return null;
-  } catch (e) {
-    return String(e);
-  }
-}
-
-export async function discoverPortlessPorts(
-  pattern: string,
-  startPort: number,
-  endPort: number
-): Promise<PortlessDiscoveryResult | string> {
-  try {
-    return await invoke<PortlessDiscoveryResult>("discover_portless_ports", {
-      pattern,
-      startPort,
-      endPort,
-    });
-  } catch (e) {
-    return String(e);
-  }
-}
-
 export async function addPort(
   port: number,
   name: string
 ): Promise<string | null> {
+  const profileName = get(config).active_profile;
+  const version = profileVersion;
   try {
     await invoke("add_port", { port, name });
     config.update((c) => ({
       ...c,
       profiles: c.profiles.map((p) =>
-        p.name === c.active_profile
+        p.name === profileName
           ? { ...p, ports: [...p.ports, { port, name }] }
           : p
       ),
     }));
+    if (version !== profileVersion) return null;
     await loadStatuses();
-    statusMessage.set(name ? `Added port ${port} (${name})` : `Added port ${port}`);
+    if (version !== profileVersion) return null;
+    const startError = await startPort(port);
+    if (startError && version === profileVersion) {
+      statusMessage.set(`Added port ${port}, but could not start: ${startError}`);
+    }
     return null;
   } catch (e) {
     return String(e);
@@ -215,45 +171,118 @@ export async function removePort(port: number) {
   statusMessage.set(`Removed port ${port}`);
 }
 
-export async function startAll() {
+export async function removeAllPorts(): Promise<string | null> {
+  try {
+    const cfg = await invoke<Config>("remove_all_ports");
+    config.set(cfg);
+    portStatuses.set([]);
+    statusMessage.set("Removed all ports from the active profile");
+    return null;
+  } catch (e) {
+    return String(e);
+  }
+}
+
+export async function removePorts(profileName: string, ports: number[]): Promise<string | null> {
   isPending.set(true);
-  statusMessage.set("Starting port forwards...");
-  const errors = await invoke<string[]>("start_all");
-  // Give SSH ~2s to establish connections before refreshing status
-  setTimeout(async () => {
-    await loadStatuses();
+  try {
+    const cfg = await invoke<Config>("remove_ports", { profileName, ports });
+    if (get(config).active_profile === profileName) {
+      config.set(cfg);
+      portStatuses.update((statuses) => statuses.filter((entry) => !ports.includes(entry.port)));
+      statusMessage.set(`Removed ${ports.length} disconnected ports from "${profileName}"`);
+    }
+    return null;
+  } catch (e) {
+    return String(e);
+  } finally {
     isPending.set(false);
-    statusMessage.set(
-      errors.length === 0
-        ? "Port forwards started!"
-        : `Started with errors: ${errors.join(", ")}`
-    );
-  }, 2000);
+  }
+}
+
+const statusLabels = {
+  Forwarding: "forwarding",
+  RemoteDown: "not listening",
+  Reconnecting: "reconnecting or queued",
+  TunnelDown: "tunnel down",
+  PortInUse: "port in use",
+  Stopped: "stopped",
+};
+
+function forwardingSummary(statuses: PortStatusInfo[]) {
+  const counts = Object.entries(statusLabels).flatMap(([status, label]) => {
+    const count = statuses.filter((entry) => entry.status === status).length;
+    return count ? [`${count} ${label}`] : [];
+  });
+  return counts.length ? counts.join(", ") : "No ports configured";
+}
+
+export async function startAll() {
+  const version = profileVersion;
+  const message = "Starting port forwards...";
+  isPending.set(true);
+  statusMessage.set(message);
+  try {
+    const errors = await invoke<string[]>("start_all");
+    // SSH needs time to establish connections before an observed result is useful.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (version !== profileVersion) return;
+    await loadStatuses();
+    if (version === profileVersion && get(statusMessage) === message) {
+      const summary = forwardingSummary(get(portStatuses));
+      statusMessage.set(errors.length ? `${summary}. Errors: ${errors.join(", ")}` : summary);
+    }
+  } catch (e) {
+    if (version === profileVersion && get(statusMessage) === message) {
+      statusMessage.set(`Start failed: ${e}`);
+    }
+  } finally {
+    isPending.set(false);
+  }
 }
 
 export async function stopAll() {
-  await invoke("stop_all");
-  await loadStatuses();
-  statusMessage.set("Port forwards stopped");
+  isPending.set(true);
+  try {
+    await invoke("stop_all");
+    await loadStatuses();
+    statusMessage.set("Port forwards stopped");
+  } catch (e) {
+    statusMessage.set(`Stop failed: ${e}`);
+  } finally {
+    isPending.set(false);
+  }
 }
 
 export async function startPort(port: number): Promise<string | null> {
+  const version = profileVersion;
+  const message = `Starting port ${port}...`;
+  pendingPorts.update((ports) => new Set([...ports, port]));
+  statusMessage.set(message);
   try {
-    isPending.set(true);
-    statusMessage.set(`Starting port ${port}...`);
     await invoke("start_port", { port });
-    // Give SSH ~2s to establish the connection before refreshing
-    setTimeout(async () => {
-      await loadStatuses();
-      isPending.set(false);
-      statusMessage.set(`Port ${port} started`);
-    }, 2000);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (version !== profileVersion) return null;
+    await loadStatuses();
+    if (version === profileVersion && get(statusMessage) === message) {
+      const status = get(portStatuses).find((entry) => entry.port === port);
+      statusMessage.set(status ? `Port ${port}: ${statusLabels[status.status]}` : `Port ${port} is no longer configured`);
+    }
     return null;
   } catch (e) {
-    isPending.set(false);
     const msg = String(e);
-    statusMessage.set(`Start failed: ${msg}`);
+    if (version === profileVersion && get(statusMessage) === message) {
+      statusMessage.set(`Start failed: ${msg}`);
+    }
     return msg;
+  } finally {
+    if (version === profileVersion) {
+      pendingPorts.update((ports) => {
+        const remaining = new Set(ports);
+        remaining.delete(port);
+        return remaining;
+      });
+    }
   }
 }
 

@@ -14,57 +14,6 @@ fn default_rate_limit_window_secs() -> u32 {
     30
 }
 
-fn default_profile_mode() -> ProfileMode {
-    ProfileMode::Ports
-}
-
-fn default_portless_scheme() -> String {
-    "https".to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ProfileMode {
-    Ports,
-    Portless,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortlessGateway {
-    pub name: String,
-    #[serde(default)]
-    pub host: Option<String>,
-    pub local_port: u16,
-    pub remote_port: u16,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortlessConfig {
-    #[serde(default = "default_portless_base_local_port")]
-    pub base_local_port: u16,
-    #[serde(default = "default_portless_scheme")]
-    pub scheme: String,
-    #[serde(default)]
-    pub hosts: Vec<String>,
-    #[serde(default)]
-    pub gateways: Vec<PortlessGateway>,
-}
-
-impl Default for PortlessConfig {
-    fn default() -> Self {
-        Self {
-            base_local_port: default_portless_base_local_port(),
-            scheme: default_portless_scheme(),
-            hosts: Vec::new(),
-            gateways: Vec::new(),
-        }
-    }
-}
-
-fn default_portless_base_local_port() -> u16 {
-    8100
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ForwardedPort {
     pub port: u16,
@@ -104,10 +53,6 @@ pub struct Profile {
     pub host: String,
     pub user: String,
     pub ssh_port: u16,
-    #[serde(default = "default_profile_mode")]
-    pub mode: ProfileMode,
-    #[serde(default)]
-    pub portless: PortlessConfig,
     pub ports: Vec<ForwardedPort>,
     /// Maximum number of SSH connection attempts allowed within the rate limit window.
     #[serde(default = "default_rate_limit_max")]
@@ -124,8 +69,6 @@ impl Profile {
             host: String::new(),
             user: String::new(),
             ssh_port: 22,
-            mode: ProfileMode::Ports,
-            portless: PortlessConfig::default(),
             ports: Vec::new(),
             rate_limit_max: default_rate_limit_max(),
             rate_limit_window_secs: default_rate_limit_window_secs(),
@@ -196,8 +139,6 @@ pub fn load_config(app_data_dir: &PathBuf) -> Config {
                 host: old.host,
                 user: old.user,
                 ssh_port: old.ssh_port,
-                mode: ProfileMode::Ports,
-                portless: PortlessConfig::default(),
                 ports: old.ports,
                 rate_limit_max: default_rate_limit_max(),
                 rate_limit_window_secs: default_rate_limit_window_secs(),
@@ -238,8 +179,6 @@ pub fn load_config(app_data_dir: &PathBuf) -> Config {
                         host: old.host.unwrap_or_default(),
                         user: old.user.unwrap_or_default(),
                         ssh_port: old.ssh_port.unwrap_or(22),
-                        mode: ProfileMode::Ports,
-                        portless: PortlessConfig::default(),
                         ports: old.ports.unwrap_or_default(),
                         rate_limit_max: default_rate_limit_max(),
                         rate_limit_window_secs: default_rate_limit_window_secs(),
